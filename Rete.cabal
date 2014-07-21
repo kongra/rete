@@ -1,0 +1,26 @@
+name:                Rete
+version:             0.1.0.0
+synopsis:            An implementation of Rete/UL algorithm
+description:         Provides a Haskell implementation of the Rete/UL
+                     algorithm as described in "Production Matching
+                     for Large Learning Systems" Robert Doorenbos PhD
+                     Thesis using STM.
+license:             BSD3
+license-file:        LICENSE
+author:              Konrad Grzanek
+maintainer:          kongra@gmail.com
+copyright:           (c) Konrad Grzanek 2014
+category:            AI
+build-type:          Simple
+-- extra-source-files:
+cabal-version:       >=1.10
+
+library
+  Ghc-options:         -Wall -O2
+  exposed-modules:     AI.Rete
+                       AI.Rete.Env
+  -- other-modules:
+  -- other-extensions:
+  build-depends:       base >=4.7 && <4.8
+  -- hs-source-dirs:
+  default-language:    Haskell2010

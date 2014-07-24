@@ -21,11 +21,13 @@ regularIDStart :: ID
 regularIDStart = 999 -- First 999 are reserved
 
 -- ENVIRONMENT
-data Env = Env !(TVar ID) !(TVar SymbolRegistry)
+data Env = Env
+           {-# UNPACK #-} !(TVar ID)             -- id
+           {-# UNPACK #-} !(TVar SymbolRegistry) -- symbols
 
 -- SYMBOLS (INCLUDING VARIABLES)
-data Symbol = Symbol   !ID !String
-            | Variable !ID !String
+data Symbol = Symbol   {-# UNPACK #-} !ID !String
+            | Variable {-# UNPACK #-} !ID !String
 
 type SymbolRegistry = Map.Map String Symbol
 
@@ -38,8 +40,11 @@ instance Eq Symbol where
   (Variable id1 _) == (Variable id2 _) = id1 == id2
   _ == _ = False
 
--- WMES
-data WME = WME !Symbol !Symbol !Symbol
+-- WMES 
+data WME = WME 
+           !Symbol -- obj 
+           !Symbol -- attr
+           !Symbol -- val
 
 instance Show WME where
   show (WME obj attr val) = "(" ++

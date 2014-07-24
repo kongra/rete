@@ -1,3 +1,7 @@
 #!/bin/bash
 
-hlint `find ./AI -name "*.hs"`
+echo "hlint src/"
+hlint `find ./src -name "*.hs"`
+
+echo "hlint tests/"
+hlint `find ./tests -name "*.hs"`

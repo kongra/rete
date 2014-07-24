@@ -12,6 +12,7 @@
 module AI.Rete.WME where
 
 import Control.Concurrent.STM
+
 import AI.Rete.Data
 import qualified AI.Rete.Symbol as Symbol
 
@@ -21,3 +22,12 @@ fromStrings env obj attr val = do
   attr' <- Symbol.intern env attr
   val'  <- Symbol.intern env val
   return (WME obj' attr' val')
+
+-- import qualified AI.Rete.Env as Env
+-- test1 :: IO ()
+-- test1 = do
+--   env <-  atomically (Env.create)
+--   wme1 <- atomically (fromStrings env "Ala" "ma" "psa")
+--   wme2 <- atomically (fromStrings env "Ala" "ma" "kota")
+
+--   print (wme1 == wme2)

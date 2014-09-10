@@ -1,12 +1,17 @@
 {-# LANGUAGE CPP #-}
-
-#if __GLASGOW_HASKELL__ >= 702
+#if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 702
 {-# LANGUAGE Trustworthy #-}
 #endif
-
 {-# OPTIONS_GHC -Wall #-}
-
--- Copyright : (c) Konrad Grzanek 2014
--- Created   : 2014-07-21
-
+------------------------------------------------------------------------
+-- |
+-- Module      : AI.Rete
+-- Copyright   : (c) 2014 Konrad Grzanek
+-- License     : BSD-style (see the file LICENSE)
+-- Created     : 2014-07-21
+-- Maintainer  : kongra@gmail.com
+-- Stability   : experimental
+-- Portability : portable
+--
+------------------------------------------------------------------------
 module AI.Rete where

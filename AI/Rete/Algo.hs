@@ -431,7 +431,20 @@ leftActivateNegativeNode _ _ _ _ _ = undefined -- TODO
 {-# INLINABLE leftActivateNegativeNode #-}
 
 rightActivateNegativeNode :: Env -> WME -> ReteNode -> ReteNodeVariant -> STM ()
-rightActivateNegativeNode _ _ _ _ = undefined -- TODO
+rightActivateNegativeNode _ wme _ variant = do
+  toks <- readTVar (negativeNodeItems variant)
+  unless (Set.null toks) $ do
+    let tests = joinTests variant
+    forM_ (Set.toList toks) $ \tok ->
+      when (performJoinTests tests tok wme) $ do
+        joinResults <- readTVar (tokNegJoinResults tok)
+        when (Set.null joinResults) (deleteDescendentsOfToken tok)
+        
+        let jr = NegativeJoinResult tok wme
+        -- insert jr into tok.(neg)join-results
+        modifyTVar' (tokNegJoinResults tok) (Set.insert jr) 
+        -- insert jr into wme.neg-join-results
+        modifyTVar' (wmeNegJoinResults wme) (Set.insert jr)
 {-# INLINABLE rightActivateNegativeNode #-}
 
 -- NCC NODES
@@ -484,3 +497,6 @@ relinkAncestor variant =
         then relinkAncestor ancestorVariant
         else return (Just ancestor)
 {-#  INLINABLE relinkAncestor #-}
+
+deleteDescendentsOfToken :: Token -> STM ()
+deleteDescendentsOfToken _ = undefined

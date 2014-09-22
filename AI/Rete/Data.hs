@@ -208,7 +208,7 @@ data ReteNodeVariant =
   |
   NegativeNode
   {
-    negaviteNodeItems       :: {-# UNPACK #-} !(TSet Token)
+    negativeNodeItems       :: {-# UNPACK #-} !(TSet Token)
   , negativeNodeItemsCount  :: {-# UNPACK #-} !(TVar Int)
 
     -- | The α memory this node is attached to (like for JoinNode)
@@ -275,6 +275,11 @@ data NegativeJoinResult =
     negativeJoinResultOwner :: !Token
   , negativeJoinResultWme   :: !WME
   }
+  deriving (Eq)
+
+instance Hashable NegativeJoinResult where
+  hashWithSalt salt (NegativeJoinResult owner wme) =
+    salt `hashWithSalt` owner `hashWithSalt` wme
 
 -- | TokenLocation describes the binding for a variable within a token.
 data TokenLocation = TokenLocation

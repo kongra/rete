@@ -11,7 +11,7 @@
 -- Created     : 2014-07-23
 -- Maintainer  : kongra@gmail.com
 -- Stability   : experimental
--- Portability : portable
+-- Portability : requires stm
 --
 ------------------------------------------------------------------------
 module AI.Rete.Data where
@@ -22,6 +22,9 @@ import Data.Hashable (Hashable, hashWithSalt)
 import qualified Data.HashMap.Strict as Map
 import qualified Data.HashSet as Set
 
+type TList a   = TVar [a]
+type TSet  a   = TVar (Set.HashSet a)
+
 -- | Identifier type. From now on we treat negative identifiers as
 -- special ones, and the non-negative as auto-generated.
 type ID = Int
@@ -31,7 +34,7 @@ data Symbol = Symbol   {-# UNPACK #-} !ID !String
             | Variable {-# UNPACK #-} !ID !String
 
 -- | The registry of Symbols
-type SymbolRegistry = Map.HashMap String Symbol
+type SymbolsRegistry = Map.HashMap String Symbol
 
 instance Show Symbol where
   show (Symbol   _ s) = s
@@ -53,84 +56,102 @@ data Env =
     envId :: {-# UNPACK #-} !(TVar ID)
 
     -- | The registry of (interned) Symbols
-  , envSymbolsRegistry :: {-# UNPACK #-} !(TVar SymbolRegistry)
+  , envSymbolsRegistry :: {-# UNPACK #-} !(TVar SymbolsRegistry)
+
+    -- | The Working Memory
+  , envWorkingMemory :: {-# UNPACK #-} !(TVar WorkingMemory)
+
+    -- | The registry of known α memories
+  , envAmems :: {-# UNPACK #-} !(TVar AmemsRegistry)
   }
 
 -- | Working Memory Element (WME)
 data WME =
   WME
   {
+    -- | An internal identifier of the wme
+    wmeId :: {-# UNPACK #-} !ID
+
     -- | fields
-    wmeObj  :: !Symbol
+  , wmeObj  :: !Symbol
   , wmeAttr :: !Symbol
   , wmeVal  :: !Symbol
 
     -- | α-memories whis WME belongs to (8 at most)
-  , wmeAmems :: {-# UNPACK #-} !(TVar [Amem])
+  , wmeAmems :: {-# UNPACK #-} !(TList Amem)
 
     -- | Tokens with tokenWME = this WME.
-  , wmeTokens :: {-# UNPACK #-} !(TVar (Set.HashSet Token))
+  , wmeTokens :: {-# UNPACK #-} !(TSet Token)
 
     -- | Negative join results in which this WME participates
-  , wmeNegJoinResults :: {-# UNPACK #-} !(TVar (Set.HashSet NegativeJoinResult))
+  , wmeNegJoinResults :: {-# UNPACK #-} !(TSet NegativeJoinResult)
   }
 
 instance Show WME where
-  show wme = "(" ++
-             show obj  ++ "," ++
-             show attr ++ "," ++
-             show val  ++
-             ")"
-    where obj  = wmeObj wme
-          attr = wmeAttr wme
-          val  = wmeVal wme
+  show WME {wmeObj=obj, wmeAttr=attr, wmeVal=val} =
+    "(" ++ show obj  ++ "," ++ show attr ++ "," ++ show val  ++ ")"
 
 instance Eq WME where
-  wme1 == wme2 =
-    wmeObj  wme1  == wmeObj  wme2 &&
-    wmeAttr wme1  == wmeAttr wme2 &&
-    wmeVal  wme1  == wmeVal  wme2
+  wme1 == wme2 = wmeId wme1 == wmeId wme2
+
+instance Hashable WME where
+  hashWithSalt salt wme = salt `hashWithSalt` wmeId wme
 
 -- | Token. We introduce the same structure for standard tokens and
 -- for the Dummy Top Token.
 data Token =
   Token
-  { -- | Points to a higher token, for items 1 .. i-1
-    tokParent :: !(Maybe Token)
+  {
+    -- | An internal identifier of the token
+    tokId :: {-# UNPACK #-} !ID
 
-    -- | ith WME, Nothing for some tokens
-  , tokWME :: !(Maybe WME)
+    -- | Points to a higher token, for items 1 .. i-1
+  , tokParent :: !(Maybe Token)
+
+    -- | i-th WME, Nothing for some tokens
+  , tokWme :: !(Maybe WME)
 
     -- | The node the token is in
   , tokNode :: !ReteNode
 
     -- | The Tokens with parent = this
-  , tokChildren :: {-# UNPACK #-} !(TVar (Set.HashSet Token))
+  , tokChildren :: {-# UNPACK #-} !(TSet Token)
 
     -- | Used only for Tokens in negative nodes
-  , tokNegJoinResults :: {-# UNPACK #-} !(TVar (Set.HashSet NegativeJoinResult))
+  , tokNegJoinResults :: {-# UNPACK #-} !(TSet NegativeJoinResult)
 
     -- | Similar to tokNegJoinResults but for NCC nodes
-  , tokNccResults :: {-# UNPACK #-} !(TVar (Set.HashSet Token))
+  , tokNccResults :: {-# UNPACK #-} !(TSet Token)
 
     -- | On Tokens in NCC partners: tokens in whose local memory this
     -- result resides
   , tokOwner :: !(Maybe Token)
+
   }
+
+instance Eq Token where
+  tok1 == tok2 = tokId tok1 == tokId tok2
+
+instance Hashable Token where
+  hashWithSalt salt tok = salt `hashWithSalt` tokId tok
 
 -- | Field
 data Field = Obj | Attr | Val deriving (Show)
 
--- | α-Memory
+-- | α Memory Index
 type AmemIndex = (Map.HashMap Symbol (Set.HashSet WME))
 
+-- | α Memory
 data Amem =
   Amem
   { -- | Successors must be a list, cause the ordering matters.
-    amemSuccessors :: {-# UNPACK #-} !(TVar [ReteNode])
+    amemSuccessors :: {-# UNPACK #-} !(TList ReteNode)
 
     -- | The number of join or negative node using this Amem
   , amemReferenceCount :: {-# UNPACK #-} !(TVar Int)
+
+    -- | The items in this α memory (unindexed)
+  , amemItems :: {-# UNPACK #-} !(TSet WME)
 
     -- | Items are indexed by their Field value.
   , amemItemsByObj  :: {-# UNPACK #-} !(TVar AmemIndex)
@@ -140,71 +161,75 @@ data Amem =
     -- | The items count
   , amemItemsCount :: {-# UNPACK #-} !(TVar Int)
 
-    -- TODO: wprowadzić klucze obj, attr, value przydatne przy
-    -- usuwaniu pamięci -- patrz: rete.clj
+    -- | Keys to identify the α memory in the α memories registry
+  , amemObj  :: !Symbol
+  , amemAttr :: !Symbol
+  , amemVal  :: !Symbol
   }
 
 -- | ReteNode with Variants
 data ReteNode =
   ReteNode
   {
-    reteNodeParent   :: !(Maybe ReteNode)  -- ^ Nothing for DummyTopNode
+    reteNodeId :: {-# UNPACK #-} !ID -- ^ an internal ID
+
+  , reteNodeParent   :: !(Maybe ReteNode)  -- ^ Nothing for DummyTopNode
     -- children must be a list, because the ordering matters,
     -- e.g. for NCC networks
-  , reteNodeChildren :: {-# UNPACK #-} !(TVar [ReteNode])
+  , reteNodeChildren :: {-# UNPACK #-} !(TList ReteNode)
   , reteNodeVariant  :: !ReteNodeVariant
   }
 
+instance Eq ReteNode where
+  node1 == node2 = reteNodeId node1 == reteNodeId node2
+
 data ReteNodeVariant =
-  BetaMemory
+  Bmem
   {
-    betaMemoryItems       :: {-# UNPACK #-} !(TVar (Set.HashSet Token))
-  , betaMemoryItemsCount  :: {-# UNPACK #-} !(TVar Int)
+    bmemItems       :: {-# UNPACK #-} !(TSet Token)
+  , bmemItemsCount  :: {-# UNPACK #-} !(TVar Int)
 
     -- | With left unlinking, we need this list to be able to find and
     -- share also the currently left-unlinked nodes.
-  , betaMemoryAllChildren :: {-# UNPACK #-} !(TVar (Set.HashSet ReteNode))
+  , bmemAllChildren :: {-# UNPACK #-} !(TSet ReteNode)
   }
   |
   JoinNode
   {
     -- | Points to the α memory this node is attached to.
-    joinNodeAmem :: !Amem
-    -- | nearest-ancestor-with-same-amem
-  , joinNodeNearestAncestor :: !(Maybe ReteNode)
+    nodeAmem :: !Amem
+  , nearestAncestorWithSameAmem :: !(Maybe ReteNode)
 
-  , joinNodeTests :: ![JoinNodeTest]
+  , joinTests :: ![JoinTest]
 
-  , joinNodeLeftUnlinked  :: {-# UNPACK #-} !(TVar Bool)
-  , joinNodeRightUnlinked :: {-# UNPACK #-} !(TVar Bool)
+  , leftUnlinked  :: {-# UNPACK #-} !(TVar Bool)
+  , rightUnlinked :: {-# UNPACK #-} !(TVar Bool)
   }
   |
   NegativeNode
   {
-    negaviteNodeItems       :: {-# UNPACK #-} !(TVar (Set.HashSet Token))
+    negaviteNodeItems       :: {-# UNPACK #-} !(TSet Token)
   , negativeNodeItemsCount  :: {-# UNPACK #-} !(TVar Int)
 
     -- | The α memory this node is attached to (like for JoinNode)
-  , negativeNodeAmem :: !Amem
+  , nodeAmem :: !Amem
 
-  , negativeNodeTests :: ![JoinNodeTest]
-
-    -- | nearest-ancestor-with-same-amem
-  , negativeNodeNearestAncestor :: !(Maybe ReteNode)
+  , joinTests :: ![JoinTest]
+  , nearestAncestorWithSameAmem :: !(Maybe ReteNode)
 
     -- | There is no left unlinking for negative nodes
-  , negativeNodeRightUnlinked :: {-# UNPACK #-} !(TVar Bool)
+  , rightUnlinked :: {-# UNPACK #-} !(TVar Bool)
   }
   |
   NCCNode
   {
-    nccNodeItems      :: {-# UNPACK #-} !(TVar (Set.HashSet Token))
+    nccNodeItems      :: {-# UNPACK #-} !(TSet Token)
   , nccNodeItemsCount :: {-# UNPACK #-} !(TVar Int)
 
-  , nccPartner        :: !ReteNode  -- ^ with NCCPartnerNode variant
+  , nccPartner        :: !ReteNode  -- ^ with NCCPartner variant
   }
   |
-  NCCPartnerNode
+  NCCPartner
   {
     -- | A corresponding NCC node, must be a TVar because of the
     -- circular dependency. See nccPartner in NCCNode variant.
@@ -213,16 +238,16 @@ data ReteNodeVariant =
   , nccPartnerNumberOfConjucts :: {-# UNPACK #-} !(TVar Int)
 
     -- | Results for the match the NCC node hasn't heard about
-  , nccPartnerNewResultBuffer :: {-# UNPACK #-} !(TVar (Set.HashSet Token))
+  , nccPartnerNewResultBuffer :: {-# UNPACK #-} !(TSet Token)
   }
   |
   PNode
   {
-    pnodeItems :: {-# UNPACK #-} !(TVar (Set.HashSet Token))
+    pnodeItems :: {-# UNPACK #-} !(TSet Token)
   , pnodeName  :: !String  -- ^ Name of the production
 
     -- | The action to fire on activation
-  , pnodeAction       :: !Action
+  , pnodeAction :: !Action
 
     -- | The optional action to fire on token deletion
   , pnodeRevokeAction :: !Action
@@ -230,19 +255,13 @@ data ReteNodeVariant =
     -- | Variable bindings for the production
   , pnodeVariableBindings :: !VariableBindings
   }
-  |
-  DummyTopNode   -- ^ Acts as a special kind of β memory
-  {
-    -- | Like betaMemoryAllChildren
-    dummyTopNodeAllChildren :: {-# UNPACK #-} !(TVar (Set.HashSet ReteNode))
 
-    -- TODO: It's set of items consists only of a single dummy top token.
-    --       It has no parent.
-  }
+-- The Dummy Top Node is a β memory with no parent and a single dummy
+-- top token.
 
--- | JoinNodeTest
-data JoinNodeTest =
-  JoinNodeTest
+-- | JoinTest
+data JoinTest =
+  JoinTest
   {
     joinTestField1   :: !Field
   , joinTestField2   :: !Field
@@ -259,17 +278,31 @@ data NegativeJoinResult =
 
 -- | TokenLocation describes the binding for a variable within a token.
 data TokenLocation = TokenLocation
-                     !Field  -- ^ the field w in WME
-                     !Int    -- ^ distance within the token
+                     !Field               -- ^ the field w in WME
+                     {-# UNPACK #-} !Int  -- ^ distance within the token
 
 -- | A map of variable bindings for productions
 type VariableBindings = Map.HashMap Symbol TokenLocation
 
 -- | Actions
 type Action = Env          -- ^ Environment
-              -> ReteNode  -- ^ with the PNode variant
+              -> ReteNode  -- ^ the one having PNode variant
               -> Token     -- ^ The matching token
               -> STM ()
 
--- SPOSTRZEŻENIA
--- * Prawdopodobnie prowostronne odłączanie ma większy wpływ na wydajność
+-- | The Working Memory key
+data WMEKey = WMEKey
+              !Symbol  -- ^ obj
+              !Symbol  -- ^ attr
+              !Symbol  -- ^ val
+            deriving Eq
+
+instance Hashable WMEKey where
+  hashWithSalt salt (WMEKey obj attr val) =
+    salt `hashWithSalt` obj `hashWithSalt` attr `hashWithSalt` val
+
+-- | The Working Memory is actually a WME registry within the Env
+type WorkingMemory = (Map.HashMap WMEKey WME)
+
+-- | The registry of known α memories within the Env
+type AmemsRegistry = (Map.HashMap WMEKey Amem)

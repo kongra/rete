@@ -126,7 +126,6 @@ data Token =
     -- | On Tokens in NCC partners: tokens in whose local memory this
     -- result resides
   , tokOwner :: !(Maybe Token)
-
   }
 
 instance Eq Token where

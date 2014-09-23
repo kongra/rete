@@ -240,11 +240,7 @@ leftActivate env tok wme node = do
 leftActivateBmem ::
   Env -> Token -> Maybe WME -> ReteNode -> ReteNodeVariant -> STM ()
 leftActivateBmem env tok wme node variant = do
-  newTok <- makeToken env tok wme node
-
-  -- Add to β memory and increment the tokens count
-  modifyTVar' (nodeTokens variant) (Set.insert newTok)
-  modifyTVar' (nodeTokensCount variant) (+1)
+  newTok <- makeAndInsertToken env tok wme node variant
 
   -- Left-activate children (solely JoinNodes, do not pass any wme)
   children <- readTVar (reteNodeChildren node)
@@ -276,6 +272,16 @@ makeToken env parentTok wme node = do
 
   return tok
 {-# INLINABLE makeToken #-}
+
+-- | Creates a token and adds it to the node.
+makeAndInsertToken ::
+  Env -> Token -> Maybe WME -> ReteNode -> ReteNodeVariant -> STM Token
+makeAndInsertToken env tok wme node variant = do
+  newTok <- makeToken env tok wme node
+  modifyTVar' (nodeTokens variant) (Set.insert newTok)
+  modifyTVar' (nodeTokensCount variant) (+1)
+  return newTok
+{-# INLINABLE makeAndInsertToken #-}
 
 -- | Returns a sequence of wmes within the token. Every wme wrapped in
 -- a Maybe instance due to the fact that some tokens do not carry on
@@ -363,9 +369,7 @@ leftActivateJoinNode env tok _ node variant = do
   -- the right-unlinked flag) ...
   rightUnlinked' <- readTVar (rightUnlinked variant)
   when rightUnlinked' $ do
-    -- Relink to α memory ...
     relinkToAlphaMemory node variant
-    -- ... and update the flag
     writeTVar (rightUnlinked variant) False
 
     -- When amem is empty ...
@@ -429,10 +433,36 @@ rightActivateJoinNode env wme node variant = do
 leftActivateNegativeNode ::
   Env -> Token -> Maybe WME -> ReteNode -> ReteNodeVariant -> STM ()
 leftActivateNegativeNode env tok wme node variant = do
-  
+  rightUnlinked' <- readTVar (rightUnlinked variant)
+  when rightUnlinked' $ do
+    -- The rightUnlinked status must be checked here because a
+    -- negative node is not right unlinked on creation.
+    toksCount <- readTVar (nodeTokensCount variant)
+    when (toksCount == 0) $ do
+      relinkToAlphaMemory node variant
+      writeTVar (rightUnlinked variant) False
 
-  return ()
+  -- Build a new token and store it just like a β memory would
+  newTok <- makeAndInsertToken env tok wme node variant
 
+  let amem = nodeAmem variant
+  wmesCount <- readTVar (amemWmesCount amem)
+
+  -- Compute the join results (using α memory indexes)
+  when (wmesCount /= 0) $ do
+    wmes <- matchingAmemWmes (joinTests variant) newTok amem
+    forM_ wmes $ \wme' -> do
+      let jr = NegativeJoinResult newTok wme'
+      modifyTVar' (tokNegJoinResults newTok) (Set.insert jr)
+      modifyTVar' (wmeNegJoinResults wme')   (Set.insert jr)
+      -- In the original Doorenbos pseudo-code there was a bug - wme
+      -- was used instead of wme' in the 3 lines above.
+
+  -- If join results are empty, then inform children
+  jresults <- readTVar (tokNegJoinResults newTok)
+  unless (Set.null jresults) $ do
+    children <- readTVar (reteNodeChildren node)
+    mapM_ (leftActivate env newTok Nothing) children
 {-# INLINABLE leftActivateNegativeNode #-}
 
 rightActivateNegativeNode :: Env -> WME -> ReteNode -> ReteNodeVariant -> STM ()
@@ -506,3 +536,4 @@ relinkAncestor variant =
 -- | Deletes the descendents of the passed token.
 deleteDescendentsOfToken :: Token -> STM ()
 deleteDescendentsOfToken _ = undefined
+

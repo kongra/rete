@@ -127,15 +127,15 @@ activateAmem env amem wme = do
   modifyTVar' (wmeAmems wme) (amem:)
 
   -- put wme into the amem
-  modifyTVar' (amemItems amem) (Set.insert wme)
+  modifyTVar' (amemWmes amem) (Set.insert wme)
 
   -- put wme into amem indexes
-  modifyTVar' (amemItemsByObj  amem) (amemIndexInsert (wmeObj  wme) wme)
-  modifyTVar' (amemItemsByAttr amem) (amemIndexInsert (wmeAttr wme) wme)
-  modifyTVar' (amemItemsByVal  amem) (amemIndexInsert (wmeVal  wme) wme)
+  modifyTVar' (amemWmesByObj  amem) (amemIndexInsert (wmeObj  wme) wme)
+  modifyTVar' (amemWmesByAttr amem) (amemIndexInsert (wmeAttr wme) wme)
+  modifyTVar' (amemWmesByVal  amem) (amemIndexInsert (wmeVal  wme) wme)
 
-  -- increase the amem items count
-  modifyTVar' (amemItemsCount amem) (+1)
+  -- increase the amem wmes count
+  modifyTVar' (amemWmesCount amem) (+1)
 
   -- right-activate all successors (children)
   successors <- readTVar (amemSuccessors amem)
@@ -242,9 +242,9 @@ leftActivateBmem ::
 leftActivateBmem env tok wme node variant = do
   newTok <- makeToken env tok wme node
 
-  -- Add to β memory and increment the items count
-  modifyTVar' (bmemItems variant) (Set.insert newTok)
-  modifyTVar' (bmemItemsCount variant) (+1)
+  -- Add to β memory and increment the tokens count
+  modifyTVar' (nodeTokens variant) (Set.insert newTok)
+  modifyTVar' (nodeTokensCount variant) (+1)
 
   -- Left-activate children (solely JoinNodes, do not pass any wme)
   children <- readTVar (reteNodeChildren node)
@@ -282,14 +282,13 @@ makeToken env parentTok wme node = do
 -- any wme.
 tokenWmes :: Token -> [Maybe WME]
 tokenWmes = map tokWme'
-            . filter isJust  -- to eliminate the dummy top token
+            . takeWhile isJust  -- to avoid going into Nothings
             . iterate parentTok
             . Just
   where
     parentTok (Just tok) = tokParent tok
     parentTok Nothing    = Nothing
-    tokWme'   (Just tok) = tokWme tok
-    tokWme'   Nothing    = Nothing
+    tokWme' tok = tokWme (fromJust tok)  -- safely, we skip Nothing tokens
 {-# INLINABLE tokenWmes #-}
 
 -- UNINDEXED JOIN TESTS
@@ -323,8 +322,8 @@ fieldValue Val  = wmeVal
 -- | Matches a token to wmes in an α memory using the α memory indexes.
 matchingAmemWmes :: [JoinTest] -> Token -> Amem -> STM [WME]
 matchingAmemWmes [] _ amem =
-  -- When no tests specified, we simply take all items from the α memory
-  liftM Set.toList (readTVar (amemItems amem))
+  -- When no tests specified, we simply take all wmes from the α memory
+  liftM Set.toList (readTVar (amemWmes amem))
 
 matchingAmemWmes tests tok amem = do
   -- When at least one test specified ...
@@ -344,9 +343,9 @@ amemWmesForTest wmes amem test = do
     Just wme = wmes !! joinTestDistance test
     value = fieldValue (joinTestField2 test) wme
 
-    amemIndexForField Obj  = readTVar . amemItemsByObj
-    amemIndexForField Attr = readTVar . amemItemsByAttr
-    amemIndexForField Val  = readTVar . amemItemsByVal
+    amemIndexForField Obj  = readTVar . amemWmesByObj
+    amemIndexForField Attr = readTVar . amemWmesByAttr
+    amemIndexForField Val  = readTVar . amemWmesByVal
 {-# INLINABLE amemWmesForTest #-}
 
 -- JOIN NODES
@@ -358,7 +357,7 @@ leftActivateJoinNode env tok _ node variant = do
       Just parent = reteNodeParent node
       -- safely above, JoinNodes always have parents
 
-  itemsCount <- readTVar (amemItemsCount amem)
+  wmesCount <- readTVar (amemWmesCount amem)
 
   -- When the parent just became non-empty (equivalently testing for
   -- the right-unlinked flag) ...
@@ -370,20 +369,21 @@ leftActivateJoinNode env tok _ node variant = do
     writeTVar (rightUnlinked variant) False
 
     -- When amem is empty ...
-    when (itemsCount == 0) $ do
+    when (wmesCount == 0) $ do
       -- ... left-unlink this node
       modifyTVar' (reteNodeChildren parent) (filter (/= node))
       writeTVar   (leftUnlinked variant) True
 
-  when (itemsCount /= 0) $ do
+  when (wmesCount /= 0) $ do
     children <- readTVar (reteNodeChildren node)
     unless (null children) $ do
       -- Matching wmes are taken from the α memory indexes
       wmes <- matchingAmemWmes (joinTests variant) tok amem
-      -- Iterate all wmes over all child nodes and left-activate
-      forM_ wmes $ \wme ->
+      -- Iterate with all wmes over all child nodes and left-activate
+      forM_ wmes $ \wme -> do
+        let wme' = Just wme
         forM_ children $ \child ->
-          leftActivate env tok (Just wme) child
+          leftActivate env tok wme' child
 
   return ()
 {-# INLINABLE leftActivateJoinNode #-}
@@ -395,7 +395,7 @@ rightActivateJoinNode env wme node variant = do
       parentVariant = reteNodeVariant parent
       -- safely above, JoinNodes always have parents
 
-  parentToksCount <- readTVar (bmemItemsCount parentVariant)
+  parentToksCount <- readTVar (nodeTokensCount parentVariant)
 
   -- When node.amem just became non-empty (equivalently testing for
   -- the left-unlinked flag)
@@ -414,35 +414,40 @@ rightActivateJoinNode env wme node variant = do
   when (parentToksCount /= 0) $ do
     children <- readTVar (reteNodeChildren node)
     unless (null children) $ do
-      parentToks <- readTVar (bmemItems parentVariant)
+      parentToks <- readTVar (nodeTokens parentVariant)
       unless (Set.null parentToks) $ do
         let tests = joinTests variant
+            wme'  = Just wme
         forM_ (Set.toList parentToks) $ \tok ->
           when (performJoinTests tests tok wme) $
             forM_ children $ \child ->
-              leftActivate env tok (Just wme) child
+              leftActivate env tok wme' child
 {-# INLINABLE rightActivateJoinNode #-}
 
 -- NEGATIVE NODES
 
 leftActivateNegativeNode ::
   Env -> Token -> Maybe WME -> ReteNode -> ReteNodeVariant -> STM ()
-leftActivateNegativeNode _ _ _ _ _ = undefined -- TODO
+leftActivateNegativeNode env tok wme node variant = do
+  
+
+  return ()
+
 {-# INLINABLE leftActivateNegativeNode #-}
 
 rightActivateNegativeNode :: Env -> WME -> ReteNode -> ReteNodeVariant -> STM ()
 rightActivateNegativeNode _ wme _ variant = do
-  toks <- readTVar (negativeNodeItems variant)
+  toks <- readTVar (nodeTokens variant)
   unless (Set.null toks) $ do
     let tests = joinTests variant
     forM_ (Set.toList toks) $ \tok ->
       when (performJoinTests tests tok wme) $ do
         joinResults <- readTVar (tokNegJoinResults tok)
         when (Set.null joinResults) (deleteDescendentsOfToken tok)
-        
+
         let jr = NegativeJoinResult tok wme
         -- insert jr into tok.(neg)join-results
-        modifyTVar' (tokNegJoinResults tok) (Set.insert jr) 
+        modifyTVar' (tokNegJoinResults tok) (Set.insert jr)
         -- insert jr into wme.neg-join-results
         modifyTVar' (wmeNegJoinResults wme) (Set.insert jr)
 {-# INLINABLE rightActivateNegativeNode #-}
@@ -498,5 +503,6 @@ relinkAncestor variant =
         else return (Just ancestor)
 {-#  INLINABLE relinkAncestor #-}
 
+-- | Deletes the descendents of the passed token.
 deleteDescendentsOfToken :: Token -> STM ()
 deleteDescendentsOfToken _ = undefined

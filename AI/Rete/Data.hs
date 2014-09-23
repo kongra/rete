@@ -105,7 +105,7 @@ data Token =
     -- | An internal identifier of the token
     tokId :: {-# UNPACK #-} !ID
 
-    -- | Points to a higher token, for items 1 .. i-1
+    -- | Points to a higher token
   , tokParent :: !(Maybe Token)
 
     -- | i-th WME, Nothing for some tokens
@@ -150,16 +150,15 @@ data Amem =
     -- | The number of join or negative node using this Amem
   , amemReferenceCount :: {-# UNPACK #-} !(TVar Int)
 
-    -- | The items in this α memory (unindexed)
-  , amemItems :: {-# UNPACK #-} !(TSet WME)
+    -- | The wmes in this α memory (unindexed)
+  , amemWmes :: {-# UNPACK #-} !(TSet WME)
+    -- | The wmes count
+  , amemWmesCount :: {-# UNPACK #-} !(TVar Int)
 
-    -- | Items are indexed by their Field value.
-  , amemItemsByObj  :: {-# UNPACK #-} !(TVar AmemIndex)
-  , amemItemsByAttr :: {-# UNPACK #-} !(TVar AmemIndex)
-  , amemItemsByVal  :: {-# UNPACK #-} !(TVar AmemIndex)
-
-    -- | The items count
-  , amemItemsCount :: {-# UNPACK #-} !(TVar Int)
+    -- | Wmes are indexed by their Field value.
+  , amemWmesByObj  :: {-# UNPACK #-} !(TVar AmemIndex)
+  , amemWmesByAttr :: {-# UNPACK #-} !(TVar AmemIndex)
+  , amemWmesByVal  :: {-# UNPACK #-} !(TVar AmemIndex)
 
     -- | Keys to identify the α memory in the α memories registry
   , amemObj  :: !Symbol
@@ -186,8 +185,8 @@ instance Eq ReteNode where
 data ReteNodeVariant =
   Bmem
   {
-    bmemItems       :: {-# UNPACK #-} !(TSet Token)
-  , bmemItemsCount  :: {-# UNPACK #-} !(TVar Int)
+    nodeTokens      :: {-# UNPACK #-} !(TSet Token)
+  , nodeTokensCount :: {-# UNPACK #-} !(TVar Int)
 
     -- | With left unlinking, we need this list to be able to find and
     -- share also the currently left-unlinked nodes.
@@ -208,8 +207,8 @@ data ReteNodeVariant =
   |
   NegativeNode
   {
-    negativeNodeItems       :: {-# UNPACK #-} !(TSet Token)
-  , negativeNodeItemsCount  :: {-# UNPACK #-} !(TVar Int)
+    nodeTokens      :: {-# UNPACK #-} !(TSet Token)
+  , nodeTokensCount :: {-# UNPACK #-} !(TVar Int)
 
     -- | The α memory this node is attached to (like for JoinNode)
   , nodeAmem :: !Amem
@@ -223,8 +222,8 @@ data ReteNodeVariant =
   |
   NCCNode
   {
-    nccNodeItems      :: {-# UNPACK #-} !(TSet Token)
-  , nccNodeItemsCount :: {-# UNPACK #-} !(TVar Int)
+    nodeTokens      :: {-# UNPACK #-} !(TSet Token)
+  , nodeTokensCount :: {-# UNPACK #-} !(TVar Int)
 
   , nccPartner        :: !ReteNode  -- ^ with NCCPartner variant
   }
@@ -243,7 +242,9 @@ data ReteNodeVariant =
   |
   PNode
   {
-    pnodeItems :: {-# UNPACK #-} !(TSet Token)
+    nodeTokens      :: {-# UNPACK #-} !(TSet Token)
+  , nodeTokensCount :: {-# UNPACK #-} !(TVar Int)
+    
   , pnodeName  :: !String  -- ^ Name of the production
 
     -- | The action to fire on activation

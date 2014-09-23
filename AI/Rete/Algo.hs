@@ -253,6 +253,7 @@ makeToken env parentTok wme node = do
   children   <- newTVar Set.empty
   njResults  <- newTVar Set.empty
   nccResults <- newTVar Set.empty
+  owner      <- newTVar Nothing
 
   let tok = Token { tokId             = id'
                   , tokParent         = Just parentTok
@@ -261,7 +262,7 @@ makeToken env parentTok wme node = do
                   , tokChildren       = children
                   , tokNegJoinResults = njResults
                   , tokNccResults     = nccResults
-                  , tokOwner          = Nothing}
+                  , tokOwner          = owner}
 
   -- Add tok to parentTok.children (for tree-based removal)
   modifyTVar' (tokChildren parentTok) (Set.insert tok)
@@ -486,7 +487,31 @@ rightActivateNegativeNode _ wme _ variant = do
 
 leftActivateNCCNode ::
   Env -> Token -> Maybe WME -> ReteNode -> ReteNodeVariant -> STM ()
-leftActivateNCCNode _ _ _ _ _ = undefined -- TODO
+leftActivateNCCNode env tok wme node variant = do
+  -- Build and store a new token.
+  newTok <- makeAndInsertToken env tok wme node variant
+
+  let partner        = nccPartner variant
+      partnerVariant = reteNodeVariant partner
+
+  newResultBuffer <- readTVar (nccPartnerNewResultBuffer partnerVariant)
+
+  -- Clear the node.partner.new-result-buffer
+  writeTVar (nccPartnerNewResultBuffer partnerVariant) Set.empty
+
+  -- Update new-token.ncc-results. Initially it was nil, so a simple
+  -- assignment of the argument is ok.
+  writeTVar (tokNccResults newTok) newResultBuffer
+
+  -- Update result.owner ← new-token
+  forM_ (Set.toList newResultBuffer) $ \result ->
+    writeTVar (tokOwner result) (Just newTok)
+
+  -- Originally was: if new-token.ncc-results = nil
+  when (Set.null newResultBuffer) $ do
+    -- no ncc results so inform children
+    children <- readTVar (reteNodeChildren node)
+    mapM_ (leftActivate env newTok Nothing) children
 {-# INLINABLE leftActivateNCCNode #-}
 
 -- NCC PARNTER NODES
@@ -536,4 +561,3 @@ relinkAncestor variant =
 -- | Deletes the descendents of the passed token.
 deleteDescendentsOfToken :: Token -> STM ()
 deleteDescendentsOfToken _ = undefined
-

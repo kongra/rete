@@ -125,7 +125,7 @@ data Token =
 
     -- | On Tokens in NCC partners: tokens in whose local memory this
     -- result resides
-  , tokOwner :: !(Maybe Token)
+  , tokOwner :: {-# UNPACK #-} !(TVar (Maybe Token))
   }
 
 instance Eq Token where
@@ -243,7 +243,7 @@ data ReteNodeVariant =
   {
     nodeTokens      :: {-# UNPACK #-} !(TSet Token)
   , nodeTokensCount :: {-# UNPACK #-} !(TVar Int)
-    
+
   , pnodeName  :: !String  -- ^ Name of the production
 
     -- | The action to fire on activation

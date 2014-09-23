@@ -288,15 +288,23 @@ makeAndInsertToken env tok wme node variant = do
 -- a Maybe instance due to the fact that some tokens do not carry on
 -- any wme.
 tokenWmes :: Token -> [Maybe WME]
-tokenWmes = map tokWme'
-            . takeWhile isJust  -- to avoid going into Nothings
-            . iterate parentTok
-            . Just
-  where
-    parentTok (Just tok) = tokParent tok
-    parentTok Nothing    = Nothing
-    tokWme' tok = tokWme (fromJust tok)  -- safely, we skip Nothing tokens
+tokenWmes = map tokWme . tokWithAncestors
 {-# INLINABLE tokenWmes #-}
+
+-- | Safely returns the parent of the argument.
+safeTokParent :: Maybe Token -> Maybe Token
+safeTokParent Nothing = Nothing
+safeTokParent (Just tok) = tokParent tok
+{-# INLINABLE safeTokParent #-}
+
+-- | Returns a sequence of tokens starting with the argument and
+-- following the parent(ship) relation.
+tokWithAncestors :: Token -> [Token]
+tokWithAncestors = map fromJust             -- safely strip-off Just
+                   . takeWhile isJust       -- to avoid going into Nothings
+                   . iterate safeTokParent
+                   . Just
+{-# INLINABLE tokWithAncestors #-}
 
 -- UNINDEXED JOIN TESTS
 
@@ -518,8 +526,24 @@ leftActivateNCCNode env tok wme node variant = do
 
 leftActivateNCCPartner ::
   Env -> Token -> Maybe WME -> ReteNode -> ReteNodeVariant -> STM ()
-leftActivateNCCPartner _ _ _ _ _ = undefined -- TODO
+leftActivateNCCPartner env tok wme partner partnerVariant = do
+  let nccNode = nccPartnerNccNode partnerVariant
+  newResultTok <- makeToken env tok wme partner
+
+  -- Find appropriate owner token (into whose local memory we should
+  -- put the new result).
+
+  return ()
+
 {-# INLINABLE leftActivateNCCPartner #-}
+
+-- | A component of NCC partner activation. Returns a pair owners-t,
+-- owners-w.
+findOwnersPair :: Int -> Token -> Maybe WME -> STM (Maybe Token, Maybe WME)
+findOwnersPair numberOfConjucts tok wme = do
+  -- TODO
+
+  return (Nothing, Nothing)
 
 -- P(RODUCTION) NODES
 

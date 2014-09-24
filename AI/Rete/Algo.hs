@@ -25,6 +25,8 @@ import Control.Concurrent.STM
 import qualified Data.HashMap.Strict as Map
 import qualified Data.HashSet as Set
 
+import Safe (headMay)
+
 import AI.Rete.Data
 
 -- MISC. UTILS
@@ -293,7 +295,7 @@ tokenWmes = map tokWme . tokWithAncestors
 
 -- | Safely returns the parent of the argument.
 safeTokParent :: Maybe Token -> Maybe Token
-safeTokParent Nothing = Nothing
+safeTokParent Nothing    = Nothing
 safeTokParent (Just tok) = tokParent tok
 {-# INLINABLE safeTokParent #-}
 
@@ -305,6 +307,10 @@ tokWithAncestors = map fromJust             -- safely strip-off Just
                    . iterate safeTokParent
                    . Just
 {-# INLINABLE tokWithAncestors #-}
+
+safeTokWme :: Maybe Token -> Maybe WME
+safeTokWme Nothing    = Nothing
+safeTokWme (Just tok) = tokWme tok
 
 -- UNINDEXED JOIN TESTS
 
@@ -527,23 +533,60 @@ leftActivateNCCNode env tok wme node variant = do
 leftActivateNCCPartner ::
   Env -> Token -> Maybe WME -> ReteNode -> ReteNodeVariant -> STM ()
 leftActivateNCCPartner env tok wme partner partnerVariant = do
-  let nccNode = nccPartnerNccNode partnerVariant
-  newResultTok <- makeToken env tok wme partner
+  nccNode   <- readTVar (nccPartnerNccNode partnerVariant)
+  newResult <- makeToken env tok wme partner
 
   -- Find appropriate owner token (into whose local memory we should
   -- put the new result).
+  let (ownersTok, ownersWme) = findOwnersPair
+                               (nccPartnerNumberOfConjucts partnerVariant)
+                               (Just tok)
+                               wme
+  owner <- findNccOwner nccNode ownersTok ownersWme
+  case owner of
+    Just owner' -> do
+      -- Add newResult to owner's local memory and propagate further.
+      modifyTVar' (tokNccResults owner') (Set.insert newResult)
+      writeTVar   (tokOwner newResult) owner
+      deleteDescendentsOfToken owner'
 
-  return ()
+    Nothing ->
+      -- We didn't find an appropriate owner token already in the NCC
+      -- node's memory, so we just stuff the result in our temporary
+      -- buffer.
+      modifyTVar' (nccPartnerNewResultBuffer partnerVariant)
+        (Set.insert newResult)
 
 {-# INLINABLE leftActivateNCCPartner #-}
 
--- | A component of NCC partner activation. Returns a pair owners-t,
--- owners-w.
-findOwnersPair :: Int -> Token -> Maybe WME -> STM (Maybe Token, Maybe WME)
-findOwnersPair numberOfConjucts tok wme = do
-  -- TODO
+-- | Searches node.tokens for a tok such that tok.parent = ownersTok
+-- and tok.wme = ownersWme.
+findNccOwner :: ReteNode -> Maybe Token -> Maybe WME -> STM (Maybe Token)
+findNccOwner node ownersTok ownersWme = do
+  tokens <- readTVar $ nodeTokens (reteNodeVariant node)
+  return $ headMay (filter matchingTok (Set.toList tokens))
+  where
+    matchingTok :: Token -> Bool
+    matchingTok tok = tokParent tok == ownersTok &&
+                      tokWme    tok == ownersWme
+{-# INLINE findNccOwner #-}
 
-  return (Nothing, Nothing)
+-- | To find the appropriate owner token (into whose local memory we
+-- should put the result tok), we must first figure out what pair
+-- (owners-t, owners-w) would represent the owner. To do this we start
+-- with the argument pair and walk up the right number of links to find
+-- the pair that emerged from the join node for the condition preceding
+-- the NCC partner.
+-- [From the original Doorenbos thesis]
+findOwnersPair :: Int -> Maybe Token -> Maybe WME -> (Maybe Token, Maybe WME)
+findOwnersPair numberOfConjucts ownersTok ownersWme =
+  if numberOfConjucts == 0
+    then (ownersTok, ownersWme)
+    else findOwnersPair (numberOfConjucts - 1) ownersTok' ownersWme'
+         where
+           ownersWme' = safeTokWme    ownersTok
+           ownersTok' = safeTokParent ownersTok
+{-# INLINE findOwnersPair #-}
 
 -- P(RODUCTION) NODES
 

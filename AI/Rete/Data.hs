@@ -233,7 +233,7 @@ data ReteNodeVariant =
     -- circular dependency. See nccPartner in NCCNode variant.
     nccPartnerNccNode :: {-# UNPACK #-} !(TVar ReteNode)
 
-  , nccPartnerNumberOfConjucts :: {-# UNPACK #-} !(TVar Int)
+  , nccPartnerNumberOfConjucts :: {-# UNPACK #-} !Int
 
     -- | Results for the match the NCC node hasn't heard about
   , nccPartnerNewResultBuffer :: {-# UNPACK #-} !(TSet Token)

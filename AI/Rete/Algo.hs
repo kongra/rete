@@ -566,7 +566,6 @@ findNccOwner node ownersTok ownersWme = do
   tokens <- readTVar $ nodeTokens (reteNodeVariant node)
   return $ headMay (filter matchingTok (Set.toList tokens))
   where
-    matchingTok :: Token -> Bool
     matchingTok tok = tokParent tok == ownersTok &&
                       tokWme    tok == ownersWme
 {-# INLINE findNccOwner #-}
@@ -627,4 +626,15 @@ relinkAncestor variant =
 
 -- | Deletes the descendents of the passed token.
 deleteDescendentsOfToken :: Token -> STM ()
-deleteDescendentsOfToken _ = undefined
+deleteDescendentsOfToken tok = do
+  children <- readTVar (tokChildren tok)
+  unless (Set.null children) $ do
+    writeTVar (tokChildren tok) Set.empty
+    -- Iteratively remove, skip removing from parent.
+    mapM_ (deleteTokenAndDescendents False True) (Set.toList children)
+{-# INLINABLE deleteDescendentsOfToken #-}
+
+-- | Deletes rhe token and it's descendents.
+deleteTokenAndDescendents :: Bool -> Bool -> Token -> STM ()
+deleteTokenAndDescendents removeFromParent removeFromWme tok = do
+  return ()

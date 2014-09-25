@@ -151,8 +151,6 @@ data Amem =
 
     -- | The wmes in this α memory (unindexed)
   , amemWmes :: {-# UNPACK #-} !(TSet WME)
-    -- | The wmes count
-  , amemWmesCount :: {-# UNPACK #-} !(TVar Int)
 
     -- | Wmes are indexed by their Field value.
   , amemWmesByObj  :: {-# UNPACK #-} !(TVar AmemIndex)
@@ -185,7 +183,6 @@ data ReteNodeVariant =
   Bmem
   {
     nodeTokens      :: {-# UNPACK #-} !(TSet Token)
-  , nodeTokensCount :: {-# UNPACK #-} !(TVar Int)
 
     -- | With left unlinking, we need this list to be able to find and
     -- share also the currently left-unlinked nodes.
@@ -207,7 +204,6 @@ data ReteNodeVariant =
   NegativeNode
   {
     nodeTokens      :: {-# UNPACK #-} !(TSet Token)
-  , nodeTokensCount :: {-# UNPACK #-} !(TVar Int)
 
     -- | The α memory this node is attached to (like for JoinNode)
   , nodeAmem :: !Amem
@@ -222,7 +218,6 @@ data ReteNodeVariant =
   NCCNode
   {
     nodeTokens      :: {-# UNPACK #-} !(TSet Token)
-  , nodeTokensCount :: {-# UNPACK #-} !(TVar Int)
 
   , nccPartner        :: !ReteNode  -- ^ with NCCPartner variant
   }
@@ -242,7 +237,6 @@ data ReteNodeVariant =
   PNode
   {
     nodeTokens      :: {-# UNPACK #-} !(TSet Token)
-  , nodeTokensCount :: {-# UNPACK #-} !(TVar Int)
 
   , pnodeName  :: !String  -- ^ Name of the production
 

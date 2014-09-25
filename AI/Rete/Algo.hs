@@ -46,6 +46,47 @@ insertBefore y x (a:as)
   | otherwise = a : insertBefore y x as
 {-# INLINABLE insertBefore #-}
 
+-- | A monadic (in STM monad) version of Set.null
+nullTSet :: TSet a -> STM Bool
+nullTSet = liftM Set.null . readTVar
+{-# INLINE nullTSet #-}
+
+-- RETE VARIANTS RECOGNITION
+-- This could be implemented using TemplateHaskell and derive, but
+-- let's keep dependencies slim if possible.
+-- See: http://stackoverflow.com/questions/6088935/
+--             checking-for-a-particular-data-constructor
+
+isBmem :: ReteNodeVariant -> Bool
+isBmem (Bmem {}) = True
+isBmem _         = False
+{-# INLINE isBmem #-}
+
+isJoinNode :: ReteNodeVariant -> Bool
+isJoinNode (JoinNode {}) = True
+isJoinNode _             = False
+{-# INLINE isJoinNode #-}
+
+isNegativeNode :: ReteNodeVariant -> Bool
+isNegativeNode (NegativeNode {}) = True
+isNegativeNode _                 = False
+{-# INLINE isNegativeNode #-}
+
+isNCCNode :: ReteNodeVariant -> Bool
+isNCCNode (NCCNode {}) = True
+isNCCNode _            = False
+{-# INLINE isNCCNode #-}
+
+isNCCPartner :: ReteNodeVariant -> Bool
+isNCCPartner (NCCPartner {}) = True
+isNCCPartner _               = False
+{-# INLINE isNCCPartner #-}
+
+isPNode :: ReteNodeVariant -> Bool
+isPNode (PNode {}) = True
+isPNode _          = False
+{-# INLINE isPNode #-}
+
 -- ENVIRONMENT, GENERATING IDS
 
 -- | Creates a new Env
@@ -135,9 +176,6 @@ activateAmem env amem wme = do
   modifyTVar' (amemWmesByObj  amem) (amemIndexInsert (wmeObj  wme) wme)
   modifyTVar' (amemWmesByAttr amem) (amemIndexInsert (wmeAttr wme) wme)
   modifyTVar' (amemWmesByVal  amem) (amemIndexInsert (wmeVal  wme) wme)
-
-  -- increase the amem wmes count
-  modifyTVar' (amemWmesCount amem) (+1)
 
   -- right-activate all successors (children)
   successors <- readTVar (amemSuccessors amem)
@@ -282,7 +320,6 @@ makeAndInsertToken ::
 makeAndInsertToken env tok wme node variant = do
   newTok <- makeToken env tok wme node
   modifyTVar' (nodeTokens variant) (Set.insert newTok)
-  modifyTVar' (nodeTokensCount variant) (+1)
   return newTok
 {-# INLINABLE makeAndInsertToken #-}
 
@@ -378,7 +415,7 @@ leftActivateJoinNode env tok _ node variant = do
       Just parent = reteNodeParent node
       -- safely above, JoinNodes always have parents
 
-  wmesCount <- readTVar (amemWmesCount amem)
+  amemEmpty <- nullTSet (amemWmes amem)
 
   -- When the parent just became non-empty (equivalently testing for
   -- the right-unlinked flag) ...
@@ -388,12 +425,12 @@ leftActivateJoinNode env tok _ node variant = do
     writeTVar (rightUnlinked variant) False
 
     -- When amem is empty ...
-    when (wmesCount == 0) $ do
+    when amemEmpty $ do
       -- ... left-unlink this node
       modifyTVar' (reteNodeChildren parent) (filter (/= node))
       writeTVar   (leftUnlinked variant) True
 
-  when (wmesCount /= 0) $ do
+  unless amemEmpty $ do
     children <- readTVar (reteNodeChildren node)
     unless (null children) $ do
       -- Matching wmes are taken from the α memory indexes
@@ -414,7 +451,8 @@ rightActivateJoinNode env wme node variant = do
       parentVariant = reteNodeVariant parent
       -- safely above, JoinNodes always have parents
 
-  parentToksCount <- readTVar (nodeTokensCount parentVariant)
+  -- parentToksCount <- readTVar (nodeTokensCount parentVariant)
+  parentEmpty <- nullTSet (nodeTokens parentVariant)
 
   -- When node.amem just became non-empty (equivalently testing for
   -- the left-unlinked flag)
@@ -425,12 +463,12 @@ rightActivateJoinNode env wme node variant = do
     writeTVar   (leftUnlinked variant) False
 
     -- When the parent β memory is empty
-    when (parentToksCount == 0) $ do
+    when parentEmpty $ do
       -- Right-unlink this node
       modifyTVar' (amemSuccessors amem) (filter (/= node))
       writeTVar (rightUnlinked variant) True
 
-  when (parentToksCount /= 0) $ do
+  unless parentEmpty $ do
     children <- readTVar (reteNodeChildren node)
     unless (null children) $ do
       parentToks <- readTVar (nodeTokens parentVariant)
@@ -452,8 +490,11 @@ leftActivateNegativeNode env tok wme node variant = do
   when rightUnlinked' $ do
     -- The rightUnlinked status must be checked here because a
     -- negative node is not right unlinked on creation.
-    toksCount <- readTVar (nodeTokensCount variant)
-    when (toksCount == 0) $ do
+    -- toksCount <- readTVar (nodeTokensCount variant)
+
+    empty <- nullTSet (nodeTokens variant)
+
+    when empty $ do
       relinkToAlphaMemory node variant
       writeTVar (rightUnlinked variant) False
 
@@ -461,10 +502,10 @@ leftActivateNegativeNode env tok wme node variant = do
   newTok <- makeAndInsertToken env tok wme node variant
 
   let amem = nodeAmem variant
-  wmesCount <- readTVar (amemWmesCount amem)
+  amemEmpty <- nullTSet (amemWmes amem)
 
   -- Compute the join results (using α memory indexes)
-  when (wmesCount /= 0) $ do
+  unless amemEmpty $ do
     wmes <- matchingAmemWmes (joinTests variant) newTok amem
     forM_ wmes $ \wme' -> do
       let jr = NegativeJoinResult newTok wme'
@@ -624,6 +665,8 @@ relinkAncestor variant =
         else return (Just ancestor)
 {-#  INLINABLE relinkAncestor #-}
 
+-- DELETING TOKENS
+
 -- | Deletes the descendents of the passed token.
 deleteDescendentsOfToken :: Token -> STM ()
 deleteDescendentsOfToken tok = do
@@ -634,7 +677,39 @@ deleteDescendentsOfToken tok = do
     mapM_ (deleteTokenAndDescendents False True) (Set.toList children)
 {-# INLINABLE deleteDescendentsOfToken #-}
 
--- | Deletes rhe token and it's descendents.
+-- | Deletes the token and it's descendents.
 deleteTokenAndDescendents :: Bool -> Bool -> Token -> STM ()
 deleteTokenAndDescendents removeFromParent removeFromWme tok = do
-  return ()
+  deleteDescendentsOfToken tok
+
+  let node        = tokNode tok
+      nodeVariant = reteNodeVariant node
+
+  -- If tok.node is not NCC partner ...
+  unless (isNCCPartner nodeVariant) $
+    -- ... remove tok from tok.node.items.
+    modifyTVar' (nodeTokens nodeVariant) (Set.delete tok)
+
+  when removeFromWme $ do
+    -- If tok.wme /= null ...
+    let wme = tokWme tok
+    when (isJust wme) $
+      -- ... remove tok from tok.wme.tokens.
+      modifyTVar' (wmeTokens (fromJust wme)) (Set.delete tok)
+
+  when removeFromParent $
+    -- Remove tok from tok.parent.children
+    -- The parent is always present unless we remove the Dummy Top
+    -- Token (thus never - DTM is never removed).
+    modifyTVar' ((tokChildren . fromJust . tokParent) tok) (Set.delete tok)
+
+  -- Do node specific cleanup: TODO
+  case nodeVariant of
+    Bmem {} -> undefined
+    NegativeNode {} -> undefined
+    NCCNode {} -> undefined
+    NCCPartner {} -> undefined
+    PNode {} -> undefined
+    _ -> return ()
+
+{-# INLINABLE deleteTokenAndDescendents #-}

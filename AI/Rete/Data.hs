@@ -22,8 +22,8 @@ import Data.Hashable (Hashable, hashWithSalt)
 import qualified Data.HashMap.Strict as Map
 import qualified Data.HashSet as Set
 
-type TList a   = TVar [a]
-type TSet  a   = TVar (Set.HashSet a)
+type TList a = TVar [a]
+type TSet  a = TVar (Set.HashSet a)
 
 -- | Identifier type. From now on we treat negative identifiers as
 -- special ones, and the non-negative as auto-generated.
@@ -69,7 +69,7 @@ data Env =
 data WME =
   WME
   {
-    -- | An internal identifier of the wme
+    -- | An internal identifier of this wme
     wmeId :: {-# UNPACK #-} !ID
 
     -- | fields
@@ -77,13 +77,13 @@ data WME =
   , wmeAttr :: !Symbol
   , wmeVal  :: !Symbol
 
-    -- | α-memories whis WME belongs to (8 at most)
+    -- | α-memories this WME belongs to (8 at most)
   , wmeAmems :: {-# UNPACK #-} !(TList Amem)
 
-    -- | Tokens with tokenWME = this WME.
+    -- | Tokens with tokenWME = this wme.
   , wmeTokens :: {-# UNPACK #-} !(TSet Token)
 
-    -- | Negative join results in which this WME participates
+    -- | Negative join results in which this wme participates
   , wmeNegJoinResults :: {-# UNPACK #-} !(TSet NegativeJoinResult)
   }
 
@@ -182,7 +182,7 @@ instance Eq ReteNode where
 data ReteNodeVariant =
   Bmem
   {
-    nodeTokens      :: {-# UNPACK #-} !(TSet Token)
+    nodeTokens :: {-# UNPACK #-} !(TSet Token)
 
     -- | With left unlinking, we need this list to be able to find and
     -- share also the currently left-unlinked nodes.
@@ -203,7 +203,7 @@ data ReteNodeVariant =
   |
   NegativeNode
   {
-    nodeTokens      :: {-# UNPACK #-} !(TSet Token)
+    nodeTokens :: {-# UNPACK #-} !(TSet Token)
 
     -- | The α memory this node is attached to (like for JoinNode)
   , nodeAmem :: !Amem
@@ -217,9 +217,9 @@ data ReteNodeVariant =
   |
   NCCNode
   {
-    nodeTokens      :: {-# UNPACK #-} !(TSet Token)
+    nodeTokens :: {-# UNPACK #-} !(TSet Token)
 
-  , nccPartner        :: !ReteNode  -- ^ with NCCPartner variant
+  , nccPartner :: !ReteNode  -- ^ with NCCPartner variant
   }
   |
   NCCPartner
@@ -236,9 +236,9 @@ data ReteNodeVariant =
   |
   PNode
   {
-    nodeTokens      :: {-# UNPACK #-} !(TSet Token)
+    nodeTokens :: {-# UNPACK #-} !(TSet Token)
 
-  , pnodeName  :: !String  -- ^ Name of the production
+  , pnodeName :: !String  -- ^ Name of the production
 
     -- | The action to fire on activation
   , pnodeAction :: !Action

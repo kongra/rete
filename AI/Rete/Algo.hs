@@ -51,13 +51,25 @@ nullTSet :: TSet a -> STM Bool
 nullTSet = liftM Set.null . readTVar
 {-# INLINE nullTSet #-}
 
--- | A version of when with args inverted.
-iwhen :: Monad m => m () -> Bool -> m ()
-iwhen s p = when p s
+-- | A version of when that works on m Bool rather than raw Bool.
+whenM :: Monad m => m Bool -> m () -> m ()
+whenM p s = p >>= flip when s
+{-# INLINE whenM #-}
 
--- | A version of unless with args inverted.
-iunless :: Monad m => m () -> Bool -> m ()
-iunless s p = unless p s
+-- | A version of unless that works on m Bool rather than raw Bool.
+unlessM :: Monad m => m Bool -> m () -> m ()
+unlessM p s = p >>= flip unless s
+{-# INLINE unlessM #-}
+
+-- | A version of mapM_ that works on m [a] rather than raw [a].
+mapMM_ :: Monad m => (a -> m b) -> m [a] -> m ()
+mapMM_ f as = as >>= mapM_ f
+{-# INLINE mapMM_ #-}
+
+-- | A version of forM_ that works on m [a] rather than raw [a].
+forMM_ :: Monad m => m [a] -> (a -> m b) -> m ()
+forMM_ = flip mapMM_
+{-# INLINE forMM_ #-}
 
 -- VARIANTS
 
@@ -123,17 +135,17 @@ internSymbol _ "" = return emptySymbol
 
 internSymbol env name@[x]
   | x == '?'  = return emptyVariable
-  | otherwise = doInternSymbol env name Symbol
+  | otherwise = internSymbolImpl env name Symbol
 
 internSymbol env name@(x:_)
-  | x == '?'  = doInternSymbol env name Variable
-  | otherwise = doInternSymbol env name Symbol
+  | x == '?'  = internSymbolImpl env name Variable
+  | otherwise = internSymbolImpl env name Symbol
 {-# INLINABLE internSymbol #-}
 
 type SymbolConstructor = ID -> String -> Symbol
 
-doInternSymbol :: Env -> String -> SymbolConstructor -> STM Symbol
-doInternSymbol env name constr = do
+internSymbolImpl :: Env -> String -> SymbolConstructor -> STM Symbol
+internSymbolImpl env name constr = do
   registry <- readTVar (envSymbolsRegistry env)
   case Map.lookup name registry of
     Just s  -> return s
@@ -142,7 +154,7 @@ doInternSymbol env name constr = do
       let s = constr id' name
       modifyTVar' (envSymbolsRegistry env) (Map.insert name s)
       return s
-{-# INLINABLE doInternSymbol #-}
+{-# INLINABLE internSymbolImpl #-}
 
 -- α MEMORY, ACTIVATION
 
@@ -169,8 +181,7 @@ activateAmem env amem wme = do
   modifyTVar' (amemWmesByVal  amem) (amemIndexInsert (wmeVal  wme) wme)
 
   -- right-activate all successors (children)
-  successors <- readTVar (amemSuccessors amem)
-  mapM_ (rightActivate env wme) successors
+  mapMM_ (rightActivate env wme) (readTVar (amemSuccessors amem))
 {-# INLINABLE activateAmem #-}
 
 -- | Propagates the wme into the corresponding α memories and further
@@ -334,8 +345,7 @@ leftActivateBmem env tok wme node = do
   newTok <- makeAndInsertToken env tok wme node
 
   -- Left-activate children (solely JoinNodes, do not pass any wme)
-  children <- readTVar (nodeChildren node)
-  mapM_ (leftActivate env newTok Nothing) children
+  mapMM_ (leftActivate env newTok Nothing) (readTVar (nodeChildren node))
 {-# INLINABLE leftActivateBmem #-}
 
 -- UNINDEXED JOIN TESTS
@@ -408,10 +418,8 @@ leftActivateJoinNode env tok _ node = do
 
   -- When the parent just became non-empty (equivalently testing for
   -- the right-unlinked flag) ...
-  rightUnlinked' <- readTVar (vprop rightUnlinked node)
-  when rightUnlinked' $ do
+  whenM (readTVar (vprop rightUnlinked node)) $ do
     relinkToAlphaMemory node
-
     -- When amem is empty, left unlink this node
     when isAmemEmpty $ leftUnlink node parent
 
@@ -439,8 +447,7 @@ rightActivateJoinNode env wme node = do
 
   -- When node.amem just became non-empty (equivalently testing for
   -- the left-unlinked flag)
-  leftUnlinked' <- readTVar (vprop leftUnlinked node)
-  when leftUnlinked' $ do
+  whenM (readTVar (vprop leftUnlinked node)) $ do
     -- Relink (left) this node to parent (β memory)
     relinkToParent node parent
 
@@ -465,21 +472,18 @@ rightActivateJoinNode env wme node = do
 leftActivateNegativeNode ::
   Env -> Token -> Maybe WME -> Node -> STM ()
 leftActivateNegativeNode env tok wme node = do
-  rightUnlinked' <- readTVar (vprop rightUnlinked node)
-  when rightUnlinked' $ do
+  whenM (readTVar (vprop rightUnlinked node)) $
     -- The rightUnlinked status must be checked here because a
     -- negative node is not right unlinked on creation.
-    isEmpty <- nullTSet (vprop nodeTokens node)
-    when isEmpty $ relinkToAlphaMemory node
+    whenM (nullTSet (vprop nodeTokens node)) $ relinkToAlphaMemory node
 
   -- Build a new token and store it just like a β memory would
   newTok <- makeAndInsertToken env tok wme node
 
   let amem = vprop nodeAmem node
-  isAmemEmpty <- nullTSet (amemWmes amem)
 
   -- Compute the join results (using α memory indexes)
-  unless isAmemEmpty $ do
+  unlessM (nullTSet (amemWmes amem)) $ do
     wmes <- matchingAmemWmes (vprop joinTests node) newTok amem
     forM_ wmes $ \wme' -> do
       let jr = NegativeJoinResult newTok wme'
@@ -489,10 +493,8 @@ leftActivateNegativeNode env tok wme node = do
       -- was used instead of wme' in the 3 lines above.
 
   -- If join results are empty, then inform children
-  emptyjrs <- nullTSet (tokNegJoinResults newTok)
-  unless emptyjrs $ do
-    children <- readTVar (nodeChildren node)
-    mapM_ (leftActivate env newTok Nothing) children
+  unlessM (nullTSet (tokNegJoinResults newTok)) $
+    mapMM_ (leftActivate env newTok Nothing) (readTVar (nodeChildren node))
 {-# INLINABLE leftActivateNegativeNode #-}
 
 rightActivateNegativeNode :: Env -> WME -> Node -> STM ()
@@ -539,10 +541,9 @@ leftActivateNCCNode env tok wme node = do
   forM_ (Set.toList newTokNccResults) $ \result ->
     writeTVar (tokOwner result) jnewTok
 
-  when (Set.null newTokNccResults) $ do
+  when (Set.null newTokNccResults) $
     -- no ncc results so inform children
-    children <- readTVar (nodeChildren node)
-    mapM_ (leftActivate env newTok Nothing) children
+    mapMM_ (leftActivate env newTok Nothing) (readTVar (nodeChildren node))
 {-# INLINABLE leftActivateNCCNode #-}
 
 -- NCC PARNTER NODES
@@ -598,9 +599,9 @@ findOwnersPair numberOfConjucts ownersTok ownersWme =
   if numberOfConjucts == 0
     then (ownersTok, ownersWme)
     else findOwnersPair (numberOfConjucts - 1) ownersTok' ownersWme'
-         where
-           ownersWme' = safeTokWme    ownersTok
-           ownersTok' = safeTokParent ownersTok
+  where
+    ownersWme' = safeTokWme    ownersTok
+    ownersTok' = safeTokParent ownersTok
 {-# INLINE findOwnersPair #-}
 
 -- P(RODUCTION) NODES
@@ -703,12 +704,9 @@ deleteTokenAndDescendents removeFromParent removeFromWme tok = do
   -- Node variant-specific cleanup:
   case nodeVariant node of
     Bmem {} ->
-      nullTSet (vprop nodeTokens node) >>= iwhen
-        (readTVar (nodeChildren node) >>= mapM_
-         -- Right unlink. In future beware some children may not be
-         -- right unlinkable, e.g. predicate nodes. If so, insert a
-         -- proper check here.
-         (\child -> rightUnlink child (vprop nodeAmem child)))
+      whenM (nullTSet (vprop nodeTokens node)) $
+        forMM_ (readTVar (nodeChildren node)) $ \child ->
+          rightUnlink child (vprop nodeAmem child)
 
     -- TODO:
     NegativeNode {} -> undefined

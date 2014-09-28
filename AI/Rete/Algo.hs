@@ -418,7 +418,7 @@ leftActivateJoinNode env tok _ node = do
 
   -- When the parent just became non-empty (equivalently testing for
   -- the right-unlinked flag) ...
-  whenM (readTVar (vprop rightUnlinked node)) $ do
+  whenM (isRightUnlinked node) $ do
     relinkToAlphaMemory node
     -- When amem is empty, left unlink this node
     when isAmemEmpty $ leftUnlink node parent
@@ -447,7 +447,7 @@ rightActivateJoinNode env wme node = do
 
   -- When node.amem just became non-empty (equivalently testing for
   -- the left-unlinked flag)
-  whenM (readTVar (vprop leftUnlinked node)) $ do
+  whenM (isLeftUnlinked node) $ do
     -- Relink (left) this node to parent (β memory)
     relinkToParent node parent
 
@@ -472,7 +472,7 @@ rightActivateJoinNode env wme node = do
 leftActivateNegativeNode ::
   Env -> Token -> Maybe WME -> Node -> STM ()
 leftActivateNegativeNode env tok wme node = do
-  whenM (readTVar (vprop rightUnlinked node)) $
+  whenM (isRightUnlinked node) $
     -- The rightUnlinked status must be checked here because a
     -- negative node is not right unlinked on creation.
     whenM (nullTSet (vprop nodeTokens node)) $ relinkToAlphaMemory node
@@ -613,6 +613,14 @@ leftActivatePNode _ _ _ _  = undefined
 
 -- LINKING/UNLINKING
 
+isRightUnlinked :: Node -> STM Bool
+isRightUnlinked = readTVar . vprop rightUnlinked
+{-# INLINE isRightUnlinked #-}
+
+isLeftUnlinked :: Node -> STM Bool
+isLeftUnlinked = readTVar . vprop leftUnlinked
+{-# INLINE isLeftUnlinked #-}
+
 -- | Performs the right-(re)linking to a proper α memory
 relinkToAlphaMemory :: Node -> STM ()
 relinkToAlphaMemory node = do
@@ -637,7 +645,7 @@ relinkAncestor node =
   case vprop nearestAncestorWithSameAmem node of
     Nothing -> return Nothing
     Just ancestor -> do
-      rightUnlinked' <- readTVar (vprop rightUnlinked ancestor)
+      rightUnlinked' <- isRightUnlinked ancestor
       if rightUnlinked'
         then relinkAncestor ancestor
         else return (Just ancestor)

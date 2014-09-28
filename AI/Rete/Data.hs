@@ -112,7 +112,7 @@ data Token =
   , tokWme :: !(Maybe WME)
 
     -- | The node the token is in
-  , tokNode :: !ReteNode
+  , tokNode :: !Node
 
     -- | The Tokens with parent = this
   , tokChildren :: {-# UNPACK #-} !(TSet Token)
@@ -144,7 +144,7 @@ type AmemIndex = (Map.HashMap Symbol (Set.HashSet WME))
 data Amem =
   Amem
   { -- | Successors must be a list, cause the ordering matters.
-    amemSuccessors :: {-# UNPACK #-} !(TList ReteNode)
+    amemSuccessors :: {-# UNPACK #-} !(TList Node)
 
     -- | The number of join or negative node using this Amem
   , amemReferenceCount :: {-# UNPACK #-} !(TVar Int)
@@ -163,37 +163,39 @@ data Amem =
   , amemVal  :: !Symbol
   }
 
--- | ReteNode with Variants
-data ReteNode =
-  ReteNode
+-- | Node with Variants
+data Node =
+  Node
   {
-    reteNodeId :: {-# UNPACK #-} !ID -- ^ an internal ID
+    nodeId :: {-# UNPACK #-} !ID -- ^ an internal ID
 
-  , reteNodeParent   :: !(Maybe ReteNode)  -- ^ Nothing for DummyTopNode
-    -- children must be a list, because the ordering matters,
+  , nodeParent   :: !(Maybe Node)  -- ^ Nothing for DummyTopNode
+
+    -- | children must be a list, because the ordering matters,
     -- e.g. for NCC networks
-  , reteNodeChildren :: {-# UNPACK #-} !(TList ReteNode)
-  , reteNodeVariant  :: !ReteNodeVariant
+  , nodeChildren :: {-# UNPACK #-} !(TList Node)
+
+  , nodeVariant  :: !NodeVariant
   }
 
-instance Eq ReteNode where
-  node1 == node2 = reteNodeId node1 == reteNodeId node2
+instance Eq Node where
+  node1 == node2 = nodeId node1 == nodeId node2
 
-data ReteNodeVariant =
+data NodeVariant =
   Bmem
   {
     nodeTokens :: {-# UNPACK #-} !(TSet Token)
 
     -- | With left unlinking, we need this list to be able to find and
     -- share also the currently left-unlinked nodes.
-  , bmemAllChildren :: {-# UNPACK #-} !(TSet ReteNode)
+  , bmemAllChildren :: {-# UNPACK #-} !(TSet Node)
   }
   |
   JoinNode
   {
     -- | Points to the α memory this node is attached to.
     nodeAmem :: !Amem
-  , nearestAncestorWithSameAmem :: !(Maybe ReteNode)
+  , nearestAncestorWithSameAmem :: !(Maybe Node)
 
   , joinTests :: ![JoinTest]
 
@@ -209,7 +211,7 @@ data ReteNodeVariant =
   , nodeAmem :: !Amem
 
   , joinTests :: ![JoinTest]
-  , nearestAncestorWithSameAmem :: !(Maybe ReteNode)
+  , nearestAncestorWithSameAmem :: !(Maybe Node)
 
     -- | There is no left unlinking for negative nodes
   , rightUnlinked :: {-# UNPACK #-} !(TVar Bool)
@@ -218,15 +220,14 @@ data ReteNodeVariant =
   NCCNode
   {
     nodeTokens :: {-# UNPACK #-} !(TSet Token)
-
-  , nccPartner :: !ReteNode  -- ^ with NCCPartner variant
+  , nccPartner :: !Node  -- ^ with NCCPartner variant
   }
   |
   NCCPartner
   {
     -- | A corresponding NCC node, must be a TVar because of the
     -- circular dependency. See nccPartner in NCCNode variant.
-    nccPartnerNccNode :: {-# UNPACK #-} !(TVar ReteNode)
+    nccPartnerNccNode :: {-# UNPACK #-} !(TVar Node)
 
   , nccPartnerNumberOfConjucts :: {-# UNPACK #-} !Int
 
@@ -284,9 +285,9 @@ data TokenLocation = TokenLocation
 type VariableBindings = Map.HashMap Symbol TokenLocation
 
 -- | Actions
-type Action = Env          -- ^ Environment
-              -> ReteNode  -- ^ the one having PNode variant
-              -> Token     -- ^ The matching token
+type Action = Env        -- ^ Environment
+              -> Node    -- ^ the one having PNode variant
+              -> Token   -- ^ The matching token
               -> STM ()
 
 -- | The Working Memory key

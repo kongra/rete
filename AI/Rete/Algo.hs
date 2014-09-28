@@ -54,8 +54,8 @@ nullTSet = liftM Set.null . readTVar
 -- VARIANTS
 
 -- | Accesses the variant property of the node.
-vprop :: (ReteNodeVariant -> a) -> ReteNode -> a
-vprop accessor = accessor . reteNodeVariant
+vprop :: (NodeVariant -> a) -> Node -> a
+vprop accessor = accessor . nodeVariant
 {-# INLINE vprop #-}
 
 -- Variant type recognition could be implemented using TemplateHaskell
@@ -64,8 +64,8 @@ vprop accessor = accessor . reteNodeVariant
 --        checking-for-a-particular-data-constructor
 
 -- | Returns True iff the node is an NCC partner.
-isNCCPartner :: ReteNode -> Bool
-isNCCPartner node = case reteNodeVariant node of
+isNCCPartner :: Node -> Bool
+isNCCPartner node = case nodeVariant node of
   (NCCPartner {}) -> True
   _               -> False
 {-# INLINE isNCCPartner #-}
@@ -87,7 +87,7 @@ genid :: Env -> STM ID
 genid Env {envId = eid} = do
   recent <- readTVar eid
 
-  -- hopefully not in a reasonable time
+  -- Hopefully not in a reasonable time.
   when (recent == maxBound) (throwSTM IDOverflow)
 
   let new = recent + 1
@@ -231,42 +231,9 @@ createWme env obj attr val = do
              , wmeNegJoinResults = njResults}
 {-# INLINE createWme #-}
 
--- RIGHT ACTIVATION DISPATCH
+-- TOKENS CREATION AND UTILS
 
--- | Right-activates the node with the passed wme
-rightActivate :: Env -> WME -> ReteNode -> STM ()
-rightActivate env wme node = case reteNodeVariant node of
-  JoinNode     {} -> rightActivateJoinNode     env wme node
-  NegativeNode {} -> rightActivateNegativeNode env wme node
-  _               -> error "Illegal ReteNode used to rightActivate"
-{-# INLINABLE rightActivate #-}
-
--- LEFT ACTIVATION DISPATCH
-
--- | Left-activates the node
-leftActivate :: Env -> Token -> Maybe WME -> ReteNode -> STM ()
-leftActivate env tok wme node = case reteNodeVariant node of
-  Bmem           {} -> leftActivateBmem         env tok wme node
-  JoinNode       {} -> leftActivateJoinNode     env tok wme node
-  NegativeNode   {} -> leftActivateNegativeNode env tok wme node
-  NCCNode        {} -> leftActivateNCCNode      env tok wme node
-  NCCPartner     {} -> leftActivateNCCPartner   env tok wme node
-  PNode          {} -> leftActivatePNode        env tok wme node
-{-# INLINABLE leftActivate #-}
-
--- β MEMORIES, TOKENS
-
-leftActivateBmem ::
-  Env -> Token -> Maybe WME -> ReteNode -> STM ()
-leftActivateBmem env tok wme node = do
-  newTok <- makeAndInsertToken env tok wme node
-
-  -- Left-activate children (solely JoinNodes, do not pass any wme)
-  children <- readTVar (reteNodeChildren node)
-  mapM_ (leftActivate env newTok Nothing) children
-{-# INLINABLE leftActivateBmem #-}
-
-makeToken :: Env -> Token -> Maybe WME -> ReteNode -> STM Token
+makeToken :: Env -> Token -> Maybe WME -> Node -> STM Token
 makeToken env parentTok wme node = do
   id'        <- genid env
   children   <- newTVar Set.empty
@@ -294,7 +261,7 @@ makeToken env parentTok wme node = do
 {-# INLINABLE makeToken #-}
 
 -- | Creates a token and adds it to the node.
-makeAndInsertToken :: Env -> Token -> Maybe WME -> ReteNode -> STM Token
+makeAndInsertToken :: Env -> Token -> Maybe WME -> Node -> STM Token
 makeAndInsertToken env tok wme node = do
   newTok <- makeToken env tok wme node
   modifyTVar' (vprop nodeTokens node) (Set.insert newTok)
@@ -327,6 +294,41 @@ safeTokWme :: Maybe Token -> Maybe WME
 safeTokWme Nothing    = Nothing
 safeTokWme (Just tok) = tokWme tok
 {-# INLINABLE safeTokWme #-}
+
+-- RIGHT ACTIVATION DISPATCH
+
+-- | Right-activates the node with the passed wme
+rightActivate :: Env -> WME -> Node -> STM ()
+rightActivate env wme node = case nodeVariant node of
+  JoinNode     {} -> rightActivateJoinNode     env wme node
+  NegativeNode {} -> rightActivateNegativeNode env wme node
+  _               -> error "Illegal Node used to rightActivate"
+{-# INLINABLE rightActivate #-}
+
+-- LEFT ACTIVATION DISPATCH
+
+-- | Left-activates the node
+leftActivate :: Env -> Token -> Maybe WME -> Node -> STM ()
+leftActivate env tok wme node = case nodeVariant node of
+  Bmem         {} -> leftActivateBmem         env tok wme node
+  JoinNode     {} -> leftActivateJoinNode     env tok wme node
+  NegativeNode {} -> leftActivateNegativeNode env tok wme node
+  NCCNode      {} -> leftActivateNCCNode      env tok wme node
+  NCCPartner   {} -> leftActivateNCCPartner   env tok wme node
+  PNode        {} -> leftActivatePNode        env tok wme node
+{-# INLINABLE leftActivate #-}
+
+-- β MEMORIES
+
+leftActivateBmem ::
+  Env -> Token -> Maybe WME -> Node -> STM ()
+leftActivateBmem env tok wme node = do
+  newTok <- makeAndInsertToken env tok wme node
+
+  -- Left-activate children (solely JoinNodes, do not pass any wme)
+  children <- readTVar (nodeChildren node)
+  mapM_ (leftActivate env newTok Nothing) children
+{-# INLINABLE leftActivateBmem #-}
 
 -- UNINDEXED JOIN TESTS
 
@@ -388,10 +390,10 @@ amemWmesForTest wmes amem test = do
 -- JOIN NODES
 
 leftActivateJoinNode ::
-  Env -> Token -> Maybe WME -> ReteNode -> STM ()
+  Env -> Token -> Maybe WME -> Node -> STM ()
 leftActivateJoinNode env tok _ node = do
   let amem        = vprop nodeAmem node
-      Just parent = reteNodeParent node
+      Just parent = nodeParent node
       -- safely above, JoinNodes always have parents
 
   isAmemEmpty <- nullTSet (amemWmes amem)
@@ -406,7 +408,7 @@ leftActivateJoinNode env tok _ node = do
     when isAmemEmpty $ leftUnlink node parent
 
   unless isAmemEmpty $ do
-    children <- readTVar (reteNodeChildren node)
+    children <- readTVar (nodeChildren node)
     unless (null children) $ do
       -- Matching wmes are taken from the α memory indexes
       wmes <- matchingAmemWmes (vprop joinTests node) tok amem
@@ -419,10 +421,10 @@ leftActivateJoinNode env tok _ node = do
   return ()
 {-# INLINABLE leftActivateJoinNode #-}
 
-rightActivateJoinNode :: Env -> WME -> ReteNode -> STM ()
+rightActivateJoinNode :: Env -> WME -> Node -> STM ()
 rightActivateJoinNode env wme node = do
   let amem        = vprop nodeAmem node
-      Just parent = reteNodeParent node
+      Just parent = nodeParent node
       -- safely above, JoinNodes always have parents
 
   isParentEmpty <- nullTSet (vprop nodeTokens parent)
@@ -438,7 +440,7 @@ rightActivateJoinNode env wme node = do
     when isParentEmpty $ rightUnlink node amem
 
   unless isParentEmpty $ do
-    children <- readTVar (reteNodeChildren node)
+    children <- readTVar (nodeChildren node)
     unless (null children) $ do
       parentToks <- readTVar (vprop nodeTokens parent)
       unless (Set.null parentToks) $ do
@@ -453,7 +455,7 @@ rightActivateJoinNode env wme node = do
 -- NEGATIVE NODES
 
 leftActivateNegativeNode ::
-  Env -> Token -> Maybe WME -> ReteNode -> STM ()
+  Env -> Token -> Maybe WME -> Node -> STM ()
 leftActivateNegativeNode env tok wme node = do
   rightUnlinked' <- readTVar (vprop rightUnlinked node)
   when rightUnlinked' $ do
@@ -481,11 +483,11 @@ leftActivateNegativeNode env tok wme node = do
   -- If join results are empty, then inform children
   emptyjrs <- nullTSet (tokNegJoinResults newTok)
   unless emptyjrs $ do
-    children <- readTVar (reteNodeChildren node)
+    children <- readTVar (nodeChildren node)
     mapM_ (leftActivate env newTok Nothing) children
 {-# INLINABLE leftActivateNegativeNode #-}
 
-rightActivateNegativeNode :: Env -> WME -> ReteNode -> STM ()
+rightActivateNegativeNode :: Env -> WME -> Node -> STM ()
 rightActivateNegativeNode _ wme node  = do
   toks <- readTVar (vprop nodeTokens node)
   unless (Set.null toks) $ do
@@ -505,7 +507,7 @@ rightActivateNegativeNode _ wme node  = do
 -- NCC NODES
 
 leftActivateNCCNode ::
-  Env -> Token -> Maybe WME -> ReteNode -> STM ()
+  Env -> Token -> Maybe WME -> Node -> STM ()
 leftActivateNCCNode env tok wme node = do
   -- Build and store a new token.
   newTok <- makeAndInsertToken env tok wme node
@@ -513,28 +515,32 @@ leftActivateNCCNode env tok wme node = do
 
   newResultBuffer <- readTVar (vprop nccPartnerNewResultBuffer partner)
 
+  -- It is true that during the algorithm the assignment takes place:
+  -- new-token.ncc-results ← node.partner.new-result-buffer,
+  -- so for clarity:
+  let newTokNccResults = newResultBuffer
+
+  -- Update new-token.ncc-results.
+  writeTVar (tokNccResults newTok) newTokNccResults
+
   -- Clear the node.partner.new-result-buffer
   writeTVar (vprop nccPartnerNewResultBuffer partner) Set.empty
 
-  -- Update new-token.ncc-results. Initially it was nil, so a simple
-  -- assignment of the argument is ok.
-  writeTVar (tokNccResults newTok) newResultBuffer
-
   -- Update result.owner ← new-token
-  forM_ (Set.toList newResultBuffer) $ \result ->
-    writeTVar (tokOwner result) (Just newTok)
+  let jnewTok = Just newTok
+  forM_ (Set.toList newTokNccResults) $ \result ->
+    writeTVar (tokOwner result) jnewTok
 
-  -- Originally was: if new-token.ncc-results = nil
-  when (Set.null newResultBuffer) $ do
+  when (Set.null newTokNccResults) $ do
     -- no ncc results so inform children
-    children <- readTVar (reteNodeChildren node)
+    children <- readTVar (nodeChildren node)
     mapM_ (leftActivate env newTok Nothing) children
 {-# INLINABLE leftActivateNCCNode #-}
 
 -- NCC PARNTER NODES
 
 leftActivateNCCPartner ::
-  Env -> Token -> Maybe WME -> ReteNode -> STM ()
+  Env -> Token -> Maybe WME -> Node -> STM ()
 leftActivateNCCPartner env tok wme partner = do
   nccNode   <- readTVar (vprop nccPartnerNccNode partner)
   newResult <- makeToken env tok wme partner
@@ -563,7 +569,7 @@ leftActivateNCCPartner env tok wme partner = do
 
 -- | Searches node.tokens for a tok such that tok.parent = ownersTok
 -- and tok.wme = ownersWme.
-findNccOwner :: ReteNode -> Maybe Token -> Maybe WME -> STM (Maybe Token)
+findNccOwner :: Node -> Maybe Token -> Maybe WME -> STM (Maybe Token)
 findNccOwner node ownersTok ownersWme = do
   tokens <- readTVar (vprop nodeTokens node)
   return $ headMay (filter matchingTok (Set.toList tokens))
@@ -592,14 +598,14 @@ findOwnersPair numberOfConjucts ownersTok ownersWme =
 -- P(RODUCTION) NODES
 
 leftActivatePNode ::
-  Env -> Token -> Maybe WME -> ReteNode -> STM ()
+  Env -> Token -> Maybe WME -> Node -> STM ()
 leftActivatePNode _ _ _ _  = undefined
 {-# INLINABLE leftActivatePNode #-}
 
 -- LINKING/UNLINKING
 
 -- | Performs the right-(re)linking to a proper α memory
-relinkToAlphaMemory :: ReteNode -> STM ()
+relinkToAlphaMemory :: Node -> STM ()
 relinkToAlphaMemory node = do
   ancestorLookup <- relinkAncestor node
   case ancestorLookup of
@@ -617,7 +623,7 @@ relinkToAlphaMemory node = do
 
 -- | The goal of this loop is to find the nearest right linked
 -- ancestor with the same α memory.
-relinkAncestor :: ReteNode -> STM (Maybe ReteNode)
+relinkAncestor :: Node -> STM (Maybe Node)
 relinkAncestor node =
   case vprop nearestAncestorWithSameAmem node of
     Nothing -> return Nothing
@@ -629,23 +635,23 @@ relinkAncestor node =
 {-#  INLINABLE relinkAncestor #-}
 
 -- | Right-unlinks from the α memory.
-rightUnlink :: ReteNode -> Amem -> STM ()
+rightUnlink :: Node -> Amem -> STM ()
 rightUnlink node amem = do
   modifyTVar' (amemSuccessors amem) (filter (/= node))
   writeTVar   (vprop rightUnlinked node) True
 {-# INLINE rightUnlink #-}
 
 -- | Performs the left-(re)linking to the parent node.
-relinkToParent :: ReteNode -> ReteNode -> STM ()
+relinkToParent :: Node -> Node -> STM ()
 relinkToParent node parent = do
-  modifyTVar' (reteNodeChildren parent) (node:)
+  modifyTVar' (nodeChildren parent) (node:)
   writeTVar   (vprop leftUnlinked node) False
 {-# INLINE relinkToParent #-}
 
 -- | Left-unlinks from the parent.
-leftUnlink :: ReteNode -> ReteNode -> STM ()
+leftUnlink :: Node -> Node -> STM ()
 leftUnlink node parent = do
-  modifyTVar' (reteNodeChildren parent) (filter (/= node))
+  modifyTVar' (nodeChildren parent) (filter (/= node))
   writeTVar   (vprop leftUnlinked node) True
 {-# INLINE leftUnlink #-}
 
@@ -686,12 +692,12 @@ deleteTokenAndDescendents removeFromParent removeFromWme tok = do
     -- Token (thus never - DTM is never removed).
     modifyTVar' ((tokChildren . fromJust . tokParent) tok) (Set.delete tok)
 
-  -- Do node specific cleanup:
-  case reteNodeVariant node of
+  -- Node variant-specific cleanup:
+  case nodeVariant node of
     Bmem {} -> do
       isEmpty <- nullTSet (vprop nodeTokens node)
       when isEmpty $ do
-        children <- readTVar (reteNodeChildren node)
+        children <- readTVar (nodeChildren node)
         forM_ children $ \child ->
           -- Right unlink. In future beware some children may not be
           -- right unlinkable, e.g. predicate nodes. If so, insert a

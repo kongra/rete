@@ -51,6 +51,14 @@ nullTSet :: TSet a -> STM Bool
 nullTSet = liftM Set.null . readTVar
 {-# INLINE nullTSet #-}
 
+-- | A version of when with args inverted.
+iwhen :: Monad m => m () -> Bool -> m ()
+iwhen s p = when p s
+
+-- | A version of unless with args inverted.
+iunless :: Monad m => m () -> Bool -> m ()
+iunless s p = unless p s
+
 -- VARIANTS
 
 -- | Accesses the variant property of the node.
@@ -87,7 +95,7 @@ genid :: Env -> STM ID
 genid Env {envId = eid} = do
   recent <- readTVar eid
 
-  -- Hopefully not in a reasonable time.
+  -- Hopefully not in a reasonable time, but ...
   when (recent == maxBound) (throwSTM IDOverflow)
 
   let new = recent + 1
@@ -694,15 +702,13 @@ deleteTokenAndDescendents removeFromParent removeFromWme tok = do
 
   -- Node variant-specific cleanup:
   case nodeVariant node of
-    Bmem {} -> do
-      isEmpty <- nullTSet (vprop nodeTokens node)
-      when isEmpty $ do
-        children <- readTVar (nodeChildren node)
-        forM_ children $ \child ->
-          -- Right unlink. In future beware some children may not be
-          -- right unlinkable, e.g. predicate nodes. If so, insert a
-          -- proper check here.
-          rightUnlink child (vprop nodeAmem child)
+    Bmem {} ->
+      nullTSet (vprop nodeTokens node) >>= iwhen
+        (readTVar (nodeChildren node) >>= mapM_
+         -- Right unlink. In future beware some children may not be
+         -- right unlinkable, e.g. predicate nodes. If so, insert a
+         -- proper check here.
+         (\child -> rightUnlink child (vprop nodeAmem child)))
 
     -- TODO:
     NegativeNode {} -> undefined

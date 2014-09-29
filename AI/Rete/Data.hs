@@ -106,7 +106,7 @@ data Token =
     tokId :: {-# UNPACK #-} !ID
 
     -- | Points to a higher token
-  , tokParent :: !(Maybe Token)
+  , tokParent :: !Token
 
     -- | i-th WME, Nothing for some tokens
   , tokWme :: !(Maybe WME)
@@ -127,12 +127,24 @@ data Token =
     -- result resides
   , tokOwner :: {-# UNPACK #-} !(TVar (Maybe Token))
   }
+  |
+  DummyTopToken
+  {
+    -- | The node the token is in - DummyTopNode
+    tokNode :: !Node
+
+    -- | The Tokens with parent = this
+  , tokChildren :: {-# UNPACK #-} !(TSet Token)
+  }
 
 instance Eq Token where
-  tok1 == tok2 = tokId tok1 == tokId tok2
+  Token {tokId = id1} == Token {tokId = id2} = id1 == id2
+  DummyTopToken {}    == DummyTopToken {}    = True
+  _ == _ = False
 
 instance Hashable Token where
-  hashWithSalt salt tok = salt `hashWithSalt` tokId tok
+  hashWithSalt salt (Token {tokId = id'}) = salt `hashWithSalt` id'
+  hashWithSalt salt (DummyTopToken {})    = salt `hashWithSalt` ((-1) :: ID)
 
 -- | Field
 data Field = Obj | Attr | Val deriving (Show)
@@ -169,19 +181,39 @@ data Node =
   {
     nodeId :: {-# UNPACK #-} !ID -- ^ an internal ID
 
-  , nodeParent   :: !(Maybe Node)  -- ^ Nothing for DummyTopNode
+  , nodeParent :: !Node
 
     -- | children must be a list, because the ordering matters,
     -- e.g. for NCC networks
   , nodeChildren :: {-# UNPACK #-} !(TList Node)
 
-  , nodeVariant  :: !NodeVariant
+  , nodeVariant :: !NodeVariant
+  }
+  |
+  DummyTopNode
+  {
+    -- | children must be a list, because the ordering matters,
+    -- e.g. for NCC networks
+    nodeChildren :: {-# UNPACK #-} !(TList Node)
+
+  , nodeVariant :: !NodeVariant  -- DTN
   }
 
 instance Eq Node where
-  node1 == node2 = nodeId node1 == nodeId node2
+  Node {nodeId = id1} == Node {nodeId = id2} = id1 == id2
+  DummyTopNode {}     == DummyTopNode {}     = True
+  _ == _ = False
 
 data NodeVariant =
+  DTN
+  {
+    -- | Like in a β memory, but contains only a single DummyTopToken.
+    nodeTokens :: {-# UNPACK #-} !(TSet Token)
+
+    -- | Like in a β memory (see below)
+  , bmemAllChildren :: {-# UNPACK #-} !(TSet Node)
+  }
+  |
   Bmem
   {
     nodeTokens :: {-# UNPACK #-} !(TSet Token)

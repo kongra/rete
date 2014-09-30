@@ -129,7 +129,20 @@ emptyVariable = Variable (-2) "?"
 wildcardSymbol :: Symbol
 wildcardSymbol = Symbol (-3) "* (wildcard symbol)"
 
--- | Interns a symbol
+-- | If there is an interned symbol of the given name, it is returned,
+-- Nothing otherwise. The routine is intended to be used as an
+-- interning-status predicate.
+internedSymbol ::  String -> SymbolsRegistry -> Maybe Symbol
+internedSymbol ""       _ = Just emptySymbol
+
+internedSymbol name@[x] registry
+  | x == '?'  = Just emptyVariable
+  | otherwise = Map.lookup name registry
+
+internedSymbol name@(_:_) registry = Map.lookup name registry
+{-# INLINE internedSymbol #-}
+
+-- | Interns a symbol represented by the string argument.
 internSymbol :: Env -> String -> STM Symbol
 internSymbol _ "" = return emptySymbol
 
@@ -199,6 +212,8 @@ feedAmems  env wme obj attr val = do
   feedAmem env wme wildcardSymbol wildcardSymbol wildcardSymbol
 {-# INLINABLE feedAmems #-}
 
+-- | Propagates the wme into the α memory and further down the
+-- network.
 feedAmem :: Env -> WME -> Symbol -> Symbol -> Symbol -> STM ()
 feedAmem env wme obj attr val = do
   amems <- readTVar (envAmems env)
@@ -209,29 +224,35 @@ feedAmem env wme obj attr val = do
 
 -- WMES, ADDING
 
--- | Adds the fact represented by the symbols (encoded in Strings) to
--- the working memory and propagates the change downwards the Rete
--- network. Returns the corresponding WME. If the fact was already
--- present, nothing happens.
+-- | Adds the fact represented by the strings to the working memory
+-- and propagates the change downwards the Rete network. Returns the
+-- corresponding WME. If the fact was already present, nothing happens.
 addWme :: Env -> String -> String -> String -> STM (Maybe WME)
 addWme env obj attr val = do
   obj'  <- internSymbol env obj
   attr' <- internSymbol env attr
   val'  <- internSymbol env val
+  addSymbolicWme env obj' attr' val'
+{-# INLINABLE addWme #-}
 
+-- | Adds the fact represented by the symbols to the working memory
+-- and propagates the change downwards the Rete network. Returns the
+-- corresponding WME. If the fact was already present, nothing happens.
+addSymbolicWme :: Env -> Symbol -> Symbol -> Symbol -> STM (Maybe WME)
+addSymbolicWme env obj attr val = do
   workingMemory <- readTVar (envWorkingMemory env)
-  let k = WMEKey obj' attr' val'
+  let k = WMEKey obj attr val
 
   if Map.member k workingMemory
     then return Nothing  -- Already present, do nothing.
     else do
-      wme <- createWme env obj' attr' val'
+      wme <- createWme env obj attr val
       -- Put wme to the Working Memory ...
-      writeTVar (envWorkingMemory env) (Map.insert k wme workingMemory)
+      writeTVar (envWorkingMemory env) $! Map.insert k wme workingMemory
       -- ... and propagate the addition.
-      feedAmems env wme obj' attr' val'
+      feedAmems env wme obj attr val
       return (Just wme)
-{-# INLINABLE addWme #-}
+{-# INLINABLE addSymbolicWme #-}
 
 -- | Creates an empty WME
 createWme :: Env -> Symbol -> Symbol -> Symbol -> STM WME
@@ -309,11 +330,13 @@ safeMaybeTokParent (Just tok) = safeTokParent tok
 -- following the parent(ship) relation.
 tokWithAncestors :: Token -> [Token]
 tokWithAncestors = map fromJust             -- safely strip-off Just
+                   . init                   -- strip off Dummy Top Token
                    . takeWhile isJust       -- to avoid going into Nothings
                    . iterate safeMaybeTokParent
                    . Just
 {-# INLINABLE tokWithAncestors #-}
 
+-- | A safe (Maybe-aware) version of token wme accessor.
 safeTokWme :: Maybe Token -> Maybe WME
 safeTokWme Nothing    = Nothing
 safeTokWme (Just tok) = tokWme tok
@@ -681,6 +704,50 @@ leftUnlink node parent = do
   modifyTVar' (nodeChildren parent) (filter (/= node))
   writeTVar   (vprop leftUnlinked node) True
 {-# INLINE leftUnlink #-}
+
+-- REMOVING WMES
+
+-- Removes the fact described by 3 strings. Returns the removed wme or
+-- Nothing if the wme was not present in the working memory.
+removeWme :: Env -> String -> String -> String -> STM (Maybe WME)
+removeWme env obj attr val = do
+  registry <- readTVar (envSymbolsRegistry env)
+  let obj'  = internedSymbol obj  registry
+      attr' = internedSymbol attr registry
+      val'  = internedSymbol val  registry
+
+  if isJust obj' && isJust attr' && isJust val'
+    then removeSymbolicWme env
+         (fromJust obj')
+         (fromJust attr')
+         (fromJust val')
+
+    -- At least 1 of the names didn't have a corresponding interned
+    -- symbol, the wme can't exist.
+    else return Nothing
+{-# INLINABLE removeWme #-}
+
+-- Removes the fact described by 3 symbols. Returns the removed wme or
+-- Nothing if the wme was not present in the working memory.
+removeSymbolicWme :: Env -> Symbol -> Symbol -> Symbol -> STM (Maybe WME)
+removeSymbolicWme env obj attr val = do
+  workingMemory <- readTVar (envWorkingMemory env)
+  let k         = WMEKey obj attr val
+      wmeLookup = Map.lookup k workingMemory
+  case wmeLookup of
+    Nothing  -> return Nothing
+    Just wme -> do
+      writeTVar (envWorkingMemory env) $! Map.delete k workingMemory
+      propagateWmeRemoval env wme
+      return wmeLookup
+{-# INLINABLE removeSymbolicWme #-}
+
+-- | Propagates the wme removal down the Rete network. It is the
+-- actual implementation of original remove-wme procedure from the
+-- Doorenbos thesis.
+propagateWmeRemoval :: Env -> WME -> STM ()
+propagateWmeRemoval _ _ = undefined
+{-# INLINE propagateWmeRemoval #-}
 
 -- DELETING TOKENS
 

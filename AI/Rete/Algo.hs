@@ -556,15 +556,15 @@ leftActivateNCCNode env tok wme node = do
   let newTokNccResults = newResultBuffer
 
   -- Update new-token.ncc-results.
-  writeTVar (tokNccResults newTok) newTokNccResults
+  writeTVar (tokNccResults newTok) $! newTokNccResults
 
   -- Clear the node.partner.new-result-buffer
-  writeTVar (vprop nccPartnerNewResultBuffer partner) Set.empty
+  writeTVar (vprop nccPartnerNewResultBuffer partner) $! Set.empty
 
   -- Update result.owner ← new-token
   let jnewTok = Just newTok
   forM_ (Set.toList newTokNccResults) $ \result ->
-    writeTVar (tokOwner result) jnewTok
+    writeTVar (tokOwner result) $! jnewTok
 
   when (Set.null newTokNccResults) $
     -- no ncc results so inform children
@@ -590,7 +590,7 @@ leftActivateNCCPartner env tok wme partner = do
     Just owner' -> do
       -- Add newResult to owner's local memory and propagate further.
       modifyTVar' (tokNccResults owner') (Set.insert newResult)
-      writeTVar   (tokOwner newResult) owner
+      writeTVar   (tokOwner newResult) $! owner
       deleteDescendentsOfToken env owner'
 
     Nothing ->
@@ -756,7 +756,7 @@ deleteDescendentsOfToken :: Env -> Token -> STM ()
 deleteDescendentsOfToken env tok = do
   children <- readTVar (tokChildren tok)
   unless (Set.null children) $ do
-    writeTVar (tokChildren tok) Set.empty
+    writeTVar (tokChildren tok) $! Set.empty
     -- Iteratively remove, skip removing from parent.
     mapM_ (deleteTokenAndDescendents env False True) (Set.toList children)
 {-# INLINABLE deleteDescendentsOfToken #-}

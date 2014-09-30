@@ -277,7 +277,7 @@ data NodeVariant =
   , pnodeAction :: !Action
 
     -- | The optional action to fire on token deletion
-  , pnodeRevokeAction :: !Action
+  , pnodeRevokeAction :: !(Maybe Action)
 
     -- | Variable bindings for the production
   , pnodeVariableBindings :: !VariableBindings

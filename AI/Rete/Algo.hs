@@ -500,14 +500,14 @@ leftActivateNegativeNode env tok wme node = do
 {-# INLINABLE leftActivateNegativeNode #-}
 
 rightActivateNegativeNode :: Env -> WME -> Node -> STM ()
-rightActivateNegativeNode _ wme node  = do
+rightActivateNegativeNode env wme node  = do
   toks <- readTVar (vprop nodeTokens node)
   unless (Set.null toks) $ do
     let tests = vprop joinTests node
     forM_ (Set.toList toks) $ \tok ->
       when (performJoinTests tests tok wme) $ do
         emptyjrs <- nullTSet (tokNegJoinResults tok)
-        when emptyjrs (deleteDescendentsOfToken tok)
+        when emptyjrs (deleteDescendentsOfToken env tok)
 
         let jr = NegativeJoinResult tok wme
         -- insert jr into tok.(neg)join-results
@@ -568,7 +568,7 @@ leftActivateNCCPartner env tok wme partner = do
       -- Add newResult to owner's local memory and propagate further.
       modifyTVar' (tokNccResults owner') (Set.insert newResult)
       writeTVar   (tokOwner newResult) owner
-      deleteDescendentsOfToken owner'
+      deleteDescendentsOfToken env owner'
 
     Nothing ->
       -- We didn't find an appropriate owner token already in the NCC
@@ -678,19 +678,19 @@ leftUnlink node parent = do
 -- DELETING TOKENS
 
 -- | Deletes the descendents of the passed token.
-deleteDescendentsOfToken :: Token -> STM ()
-deleteDescendentsOfToken tok = do
+deleteDescendentsOfToken :: Env -> Token -> STM ()
+deleteDescendentsOfToken env tok = do
   children <- readTVar (tokChildren tok)
   unless (Set.null children) $ do
     writeTVar (tokChildren tok) Set.empty
     -- Iteratively remove, skip removing from parent.
-    mapM_ (deleteTokenAndDescendents False True) (Set.toList children)
+    mapM_ (deleteTokenAndDescendents env False True) (Set.toList children)
 {-# INLINABLE deleteDescendentsOfToken #-}
 
 -- | Deletes the token and it's descendents.
-deleteTokenAndDescendents :: Bool -> Bool -> Token -> STM ()
-deleteTokenAndDescendents removeFromParent removeFromWme tok = do
-  deleteDescendentsOfToken tok
+deleteTokenAndDescendents :: Env -> Bool -> Bool -> Token -> STM ()
+deleteTokenAndDescendents env removeFromParent removeFromWme tok = do
+  deleteDescendentsOfToken env tok
 
   let node = tokNode tok
 
@@ -736,13 +736,36 @@ deleteTokenAndDescendents removeFromParent removeFromWme tok = do
           modifyTVar' (wmeTokens (fromJust (tokWme resultTok)))
             (Set.delete resultTok)
 
-          -- .. remove result-tok from result-tok.parent.children.
+          -- ... remove result-tok from result-tok.parent.children.
           modifyTVar' (tokChildren (tokParent resultTok))
             (Set.delete resultTok)
 
-    -- TODO: implement
-    NCCPartner {} -> undefined
-    PNode {} -> undefined
-    _ -> return ()
+    NCCPartner {} -> do
+      (Just owner) <- readTVar (tokOwner tok)
+      -- A token in NCC partner always has owner.
 
+      -- Remove tok from tok.owner.ncc-results
+      nccResults <- readTVar (tokNccResults owner)
+      let updatedNccResults = Set.delete tok nccResults
+      writeTVar (tokNccResults owner) $! updatedNccResults
+
+      -- If tok.owner.ncc-results is nil
+      when (Set.null updatedNccResults) $ do
+        nccNode <- readTVar (vprop nccPartnerNccNode node)
+        -- For child in tok.node.ncc-node.children -> leftActivatexs
+        mapMM_ (leftActivate env owner Nothing)
+          (readTVar (nodeChildren nccNode))
+
+    PNode {} ->
+      -- For production nodes the only specific behavior is firing a
+      -- proper action.
+      case vprop pnodeRevokeAction node of
+        Nothing     -> return ()
+        Just action -> do
+          action env node tok
+          return ()
+
+    DTN      {} -> error "Deleting token(s) from Dummy Top Node is evil."
+    JoinNode {} -> error "Can't happen."
 {-# INLINABLE deleteTokenAndDescendents #-}
+

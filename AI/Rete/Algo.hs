@@ -611,7 +611,14 @@ findOwnersPair numberOfConjucts ownersTok ownersWme =
 
 leftActivatePNode ::
   Env -> Token -> Maybe WME -> Node -> STM ()
-leftActivatePNode _ _ _ _  = undefined
+leftActivatePNode env tok wme node  = do
+  -- Create and insert a new token.
+  newTok <- makeAndInsertToken env tok wme node
+
+  -- Fire the proper action.
+  let action = vprop pnodeAction node
+  action env node newTok
+  return ()
 {-# INLINABLE leftActivatePNode #-}
 
 -- LINKING/UNLINKING
@@ -752,7 +759,7 @@ deleteTokenAndDescendents env removeFromParent removeFromWme tok = do
       -- If tok.owner.ncc-results is nil
       when (Set.null updatedNccResults) $ do
         nccNode <- readTVar (vprop nccPartnerNccNode node)
-        -- For child in tok.node.ncc-node.children -> leftActivatexs
+        -- For child in tok.node.ncc-node.children -> leftActivate
         mapMM_ (leftActivate env owner Nothing)
           (readTVar (nodeChildren nccNode))
 

@@ -101,7 +101,7 @@ createEnv = do
   objs    <- newTVar Map.empty
   attrs   <- newTVar Map.empty
   vals    <- newTVar Map.empty
-  amems    <- newTVar Map.empty
+  amems   <- newTVar Map.empty
 
   return Env { envId              = id'
              , envSymbolsRegistry = symbols
@@ -128,11 +128,11 @@ genid Env {envId = eid} = do
 data IDOverflow = IDOverflow deriving (Show, Typeable)
 instance Exception IDOverflow
 
-type EnvIndexesOperator = Symbol -> Wme -> WmesIndex -> WmesIndex
+type WmesIndexOperator = Symbol -> Wme -> WmesIndex -> WmesIndex
 
 -- | A component mechanism working when adding/removing wmes to/from
 -- the indexes in the environment.
-updateEnvIndexes :: EnvIndexesOperator -> Env -> Wme -> STM ()
+updateEnvIndexes :: WmesIndexOperator -> Env -> Wme -> STM ()
 updateEnvIndexes f env wme = do
   let byObjIndex  = envWmesByObj  env
       byAttrIndex = envWmesByAttr env
@@ -203,7 +203,7 @@ internSymbolImpl env name constr = do
 
 -- | Creates an updated version of the wme index by putting a new
 -- wme under the key s.
-wmesIndexInsert :: Symbol -> Wme -> WmesIndex -> WmesIndex
+wmesIndexInsert :: WmesIndexOperator
 wmesIndexInsert s wme index = Map.insert s newSet index
   where oldSet = Map.lookupDefault Set.empty s index
         newSet = Set.insert wme oldSet
@@ -211,7 +211,7 @@ wmesIndexInsert s wme index = Map.insert s newSet index
 
 -- | Removes the passed wme (possibly) stored under the key s from the
 -- index.
-wmesIndexDelete :: Symbol -> Wme -> WmesIndex -> WmesIndex
+wmesIndexDelete :: WmesIndexOperator
 wmesIndexDelete s wme index =
   case Map.lookup s index of
     Nothing     -> index

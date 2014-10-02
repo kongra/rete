@@ -58,8 +58,12 @@ data Env =
     -- | The registry of (interned) Symbols
   , envSymbolsRegistry :: {-# UNPACK #-} !(TVar SymbolsRegistry)
 
-    -- | The Working Memory
-  , envWorkingMemory :: {-# UNPACK #-} !(TVar WorkingMemory)
+    -- | The Working Memory consists of a registry of all Wmes
+    -- (indexed by WmeKey) and 3 Wme indexes by Wme Field value.
+  , envWmesRegistry :: {-# UNPACK #-} !(TVar WmesRegistry)
+  , envWmesByObj    :: {-# UNPACK #-} !(TVar WmesIndex)
+  , envWmesByAttr   :: {-# UNPACK #-} !(TVar WmesIndex)
+  , envWmesByVal    :: {-# UNPACK #-} !(TVar WmesIndex)
 
     -- | The registry of known α memories
   , envAmems :: {-# UNPACK #-} !(TVar AmemsRegistry)
@@ -334,7 +338,7 @@ instance Hashable WmeKey where
     salt `hashWithSalt` obj `hashWithSalt` attr `hashWithSalt` val
 
 -- | The Working Memory is actually a Wme registry within the Env
-type WorkingMemory = (Map.HashMap WmeKey Wme)
+type WmesRegistry = (Map.HashMap WmeKey Wme)
 
 -- | The registry of known α memories within the Env
 type AmemsRegistry = (Map.HashMap WmeKey Amem)

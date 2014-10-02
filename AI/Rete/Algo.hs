@@ -95,11 +95,21 @@ isNCCPartner node = case nodeVariant node of
 -- | Creates a new Env
 createEnv :: STM Env
 createEnv = do
-  id'           <- newTVar 0
-  symbols       <- newTVar Map.empty
-  workingMemory <- newTVar Map.empty
-  amemsRegistry <- newTVar Map.empty
-  return (Env id' symbols workingMemory amemsRegistry)
+  id'     <- newTVar 0
+  symbols <- newTVar Map.empty
+  wmes    <- newTVar Map.empty
+  objs    <- newTVar Map.empty
+  attrs   <- newTVar Map.empty
+  vals    <- newTVar Map.empty
+  amems    <- newTVar Map.empty
+
+  return Env { envId              = id'
+             , envSymbolsRegistry = symbols
+             , envWmesRegistry    = wmes
+             , envWmesByObj       = objs
+             , envWmesByAttr      = attrs
+             , envWmesByVal       = vals
+             , envAmems           = amems}
 {-# INLINABLE createEnv #-}
 
 -- | Generates a new ID
@@ -117,6 +127,26 @@ genid Env {envId = eid} = do
 
 data IDOverflow = IDOverflow deriving (Show, Typeable)
 instance Exception IDOverflow
+
+type EnvIndexesOperator = Symbol -> Wme -> WmesIndex -> WmesIndex
+
+-- | A component mechanism working when adding/removing wmes to/from
+-- the indexes in the environment.
+updateEnvIndexes :: EnvIndexesOperator -> Env -> Wme -> STM ()
+updateEnvIndexes f env wme = do
+  let byObjIndex  = envWmesByObj  env
+      byAttrIndex = envWmesByAttr env
+      byValIndex  = envWmesByVal  env
+
+  modifyTVar' byObjIndex  (f (wmeObj wme)   wme)
+  modifyTVar' byObjIndex  (f wildcardSymbol wme)
+
+  modifyTVar' byAttrIndex (f (wmeAttr wme)  wme)
+  modifyTVar' byAttrIndex (f wildcardSymbol wme)
+
+  modifyTVar' byValIndex  (f (wmeVal wme)   wme)
+  modifyTVar' byValIndex  (f wildcardSymbol wme)
+{-# INLINE updateEnvIndexes #-}
 
 -- SYMBOLS, INTERNING
 
@@ -169,15 +199,27 @@ internSymbolImpl env name constr = do
       return s
 {-# INLINABLE internSymbolImpl #-}
 
--- α MEMORY, ACTIVATION
+-- WMES INDEXES MANIPULATION
 
--- | Creates an updated version of the α memory index by putting a new
+-- | Creates an updated version of the wme index by putting a new
 -- wme under the key s.
-amemIndexInsert :: Symbol -> Wme -> WmesIndex -> WmesIndex
-amemIndexInsert s wme ai = Map.insert s newSet ai
-  where oldSet = Map.lookupDefault Set.empty s ai
+wmesIndexInsert :: Symbol -> Wme -> WmesIndex -> WmesIndex
+wmesIndexInsert s wme index = Map.insert s newSet index
+  where oldSet = Map.lookupDefault Set.empty s index
         newSet = Set.insert wme oldSet
-{-# INLINABLE amemIndexInsert #-}
+{-# INLINABLE wmesIndexInsert #-}
+
+-- | Removes the passed wme (possibly) stored under the key s from the
+-- index.
+wmesIndexDelete :: Symbol -> Wme -> WmesIndex -> WmesIndex
+wmesIndexDelete s wme index =
+  case Map.lookup s index of
+    Nothing     -> index
+    Just oldSet -> Map.insert s newSet index
+      where newSet = Set.delete wme oldSet
+{-# INLINABLE wmesIndexDelete #-}
+
+-- α MEMORY, ACTIVATION
 
 -- | Activates the α memory
 activateAmem :: Env -> Amem -> Wme -> STM ()
@@ -189,9 +231,9 @@ activateAmem env amem wme = do
   modifyTVar' (amemWmes amem) (Set.insert wme)
 
   -- put wme into amem indexes
-  modifyTVar' (amemWmesByObj  amem) (amemIndexInsert (wmeObj  wme) wme)
-  modifyTVar' (amemWmesByAttr amem) (amemIndexInsert (wmeAttr wme) wme)
-  modifyTVar' (amemWmesByVal  amem) (amemIndexInsert (wmeVal  wme) wme)
+  modifyTVar' (amemWmesByObj  amem) (wmesIndexInsert (wmeObj  wme) wme)
+  modifyTVar' (amemWmesByAttr amem) (wmesIndexInsert (wmeAttr wme) wme)
+  modifyTVar' (amemWmesByVal  amem) (wmesIndexInsert (wmeVal  wme) wme)
 
   -- right-activate all successors (children)
   mapMM_ (rightActivate env wme) (readTVar (amemSuccessors amem))
@@ -240,16 +282,21 @@ addWme env obj attr val = do
 -- corresponding Wme. If the fact was already present, nothing happens.
 addSymbolicWme :: Env -> Symbol -> Symbol -> Symbol -> STM (Maybe Wme)
 addSymbolicWme env obj attr val = do
-  workingMemory <- readTVar (envWorkingMemory env)
+  let wmesRegistry = envWmesRegistry env
+  wr <- readTVar wmesRegistry
   let k = WmeKey obj attr val
 
-  if Map.member k workingMemory
+  if Map.member k wr
     then return Nothing  -- Already present, do nothing.
     else do
       wme <- createWme env obj attr val
-      -- Put wme to the Working Memory ...
-      writeTVar (envWorkingMemory env) $! Map.insert k wme workingMemory
-      -- ... and propagate the addition.
+      -- Add to the global wmes registry under key k.
+      writeTVar wmesRegistry $! Map.insert k wme wr
+
+      -- Add to indices, including the wildcard symbol key.
+      updateEnvIndexes wmesIndexInsert env wme
+
+      -- Propagate into the α memories.
       feedAmems env wme obj attr val
       return (Just wme)
 {-# INLINABLE addSymbolicWme #-}
@@ -731,14 +778,20 @@ removeWme env obj attr val = do
 -- Nothing if the wme was not present in the working memory.
 removeSymbolicWme :: Env -> Symbol -> Symbol -> Symbol -> STM (Maybe Wme)
 removeSymbolicWme env obj attr val = do
-  workingMemory <- readTVar (envWorkingMemory env)
-  let k         = WmeKey obj attr val
-      wmeLookup = Map.lookup k workingMemory
+  let wmesRegistry = envWmesRegistry env
+  wr <- readTVar wmesRegistry
+  let k      = WmeKey obj attr val
+      wmeLookup = Map.lookup k wr
+
   case wmeLookup of
     Nothing  -> return Nothing
     Just wme -> do
-      writeTVar (envWorkingMemory env) $! Map.delete k workingMemory
-      propagateWmeRemoval env wme
+      -- Remove from the global registry
+      writeTVar wmesRegistry $! Map.delete k wr
+
+      -- Remove from indices, including the wildcard symbol key.
+      updateEnvIndexes wmesIndexDelete env wme
+
       return wmeLookup
 {-# INLINABLE removeSymbolicWme #-}
 

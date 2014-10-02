@@ -83,6 +83,13 @@ vprop accessor = accessor . nodeVariant
 -- http://stackoverflow.com/questions/6088935/
 --        checking-for-a-particular-data-constructor
 
+-- | Returns True iff the node is a JoinNode.
+isJoinNode :: Node -> Bool
+isJoinNode node = case nodeVariant node of
+  (JoinNode {}) -> True
+  _             -> False
+{-# INLINE isJoinNode #-}
+
 -- | Returns True iff the node is an NCC partner.
 isNCCPartner :: Node -> Bool
 isNCCPartner node = case nodeVariant node of
@@ -786,12 +793,11 @@ removeSymbolicWme env obj attr val = do
   case wmeLookup of
     Nothing  -> return Nothing
     Just wme -> do
-      -- Remove from the global registry
+      -- Remove from Working Memory (Env registry and indices)
       writeTVar wmesRegistry $! Map.delete k wr
-
-      -- Remove from indices, including the wildcard symbol key.
       updateEnvIndexes wmesIndexDelete env wme
-
+      -- ... and propagate down the network.
+      propagateWmeRemoval env wme
       return wmeLookup
 {-# INLINABLE removeSymbolicWme #-}
 
@@ -799,8 +805,45 @@ removeSymbolicWme env obj attr val = do
 -- actual implementation of original remove-wme procedure from the
 -- Doorenbos thesis.
 propagateWmeRemoval :: Env -> Wme -> STM ()
-propagateWmeRemoval _ _ = undefined
-{-# INLINE propagateWmeRemoval #-}
+propagateWmeRemoval env wme = do
+  let obj  = wmeObj  wme
+      attr = wmeAttr wme
+      val  = wmeVal  wme
+
+  -- For every amem this wme belongs to ...
+  forMM_ (readTVar (wmeAmems wme)) $ \amem -> do
+    -- ... remove wme from amem indexes
+    modifyTVar' (amemWmesByObj  amem) (wmesIndexDelete obj  wme)
+    modifyTVar' (amemWmesByAttr amem) (wmesIndexDelete attr wme)
+    modifyTVar' (amemWmesByVal  amem) (wmesIndexDelete val  wme)
+    wmes <- readTVar (amemWmes amem)
+    let updatedWmes = Set.delete wme wmes
+    writeTVar (amemWmes amem) $! updatedWmes
+
+    when (Set.null updatedWmes) $
+      -- ... left-unlink all successors of type JoinNode
+      forMM_ (readTVar (amemSuccessors amem)) $ \child ->
+        when (isJoinNode child) $ leftUnlink child (nodeParent child)
+
+  -- Delete all tokens wme is in. Remove every tokent from it's parent
+  -- token but avoid removing from wme.
+  mapMM_ (deleteTokenAndDescendents env True False)
+    (liftM Set.toList (readTVar (wmeTokens wme)))
+
+  -- For every jr in wme.negative-join-results
+  forMM_ (liftM Set.toList (readTVar (wmeNegJoinResults wme))) $ \jr -> do
+    -- ... remove jr from jr.owner.negative-join-results
+    let owner = negativeJoinResultOwner jr
+    jresults <- readTVar (tokNegJoinResults owner)
+    let updatedJresults = Set.delete jr jresults
+    writeTVar (tokNegJoinResults owner) $! updatedJresults
+
+    -- If jr.owner.negative-join-results is nil
+    when (Set.null updatedJresults) $
+      -- For each child in jr.owner.node.children
+      mapMM_ (leftActivate env owner Nothing)
+        (readTVar (nodeChildren (tokNode owner)))
+{-# INLINABLE propagateWmeRemoval #-}
 
 -- DELETING TOKENS
 

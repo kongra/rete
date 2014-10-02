@@ -173,14 +173,14 @@ internSymbolImpl env name constr = do
 
 -- | Creates an updated version of the α memory index by putting a new
 -- wme under the key s.
-amemIndexInsert :: Symbol -> WME -> AmemIndex -> AmemIndex
+amemIndexInsert :: Symbol -> Wme -> WmesIndex -> WmesIndex
 amemIndexInsert s wme ai = Map.insert s newSet ai
   where oldSet = Map.lookupDefault Set.empty s ai
         newSet = Set.insert wme oldSet
 {-# INLINABLE amemIndexInsert #-}
 
 -- | Activates the α memory
-activateAmem :: Env -> Amem -> WME -> STM ()
+activateAmem :: Env -> Amem -> Wme -> STM ()
 activateAmem env amem wme = do
   -- put amem to wme registry of Amems
   modifyTVar' (wmeAmems wme) (amem:)
@@ -199,7 +199,7 @@ activateAmem env amem wme = do
 
 -- | Propagates the wme into the corresponding α memories and further
 -- down the network
-feedAmems :: Env -> WME -> Symbol -> Symbol -> Symbol -> STM ()
+feedAmems :: Env -> Wme -> Symbol -> Symbol -> Symbol -> STM ()
 feedAmems  env wme obj attr val = do
   feedAmem env wme obj attr           val
   feedAmem env wme obj attr           wildcardSymbol
@@ -214,10 +214,10 @@ feedAmems  env wme obj attr val = do
 
 -- | Propagates the wme into the α memory and further down the
 -- network.
-feedAmem :: Env -> WME -> Symbol -> Symbol -> Symbol -> STM ()
+feedAmem :: Env -> Wme -> Symbol -> Symbol -> Symbol -> STM ()
 feedAmem env wme obj attr val = do
   amems <- readTVar (envAmems env)
-  case Map.lookup (WMEKey obj attr val) amems of
+  case Map.lookup (WmeKey obj attr val) amems of
     Just amem -> activateAmem env amem wme
     Nothing   -> return ()
 {-# INLINABLE feedAmem #-}
@@ -226,8 +226,8 @@ feedAmem env wme obj attr val = do
 
 -- | Adds the fact represented by the strings to the working memory
 -- and propagates the change downwards the Rete network. Returns the
--- corresponding WME. If the fact was already present, nothing happens.
-addWme :: Env -> String -> String -> String -> STM (Maybe WME)
+-- corresponding Wme. If the fact was already present, nothing happens.
+addWme :: Env -> String -> String -> String -> STM (Maybe Wme)
 addWme env obj attr val = do
   obj'  <- internSymbol env obj
   attr' <- internSymbol env attr
@@ -237,11 +237,11 @@ addWme env obj attr val = do
 
 -- | Adds the fact represented by the symbols to the working memory
 -- and propagates the change downwards the Rete network. Returns the
--- corresponding WME. If the fact was already present, nothing happens.
-addSymbolicWme :: Env -> Symbol -> Symbol -> Symbol -> STM (Maybe WME)
+-- corresponding Wme. If the fact was already present, nothing happens.
+addSymbolicWme :: Env -> Symbol -> Symbol -> Symbol -> STM (Maybe Wme)
 addSymbolicWme env obj attr val = do
   workingMemory <- readTVar (envWorkingMemory env)
-  let k = WMEKey obj attr val
+  let k = WmeKey obj attr val
 
   if Map.member k workingMemory
     then return Nothing  -- Already present, do nothing.
@@ -254,15 +254,15 @@ addSymbolicWme env obj attr val = do
       return (Just wme)
 {-# INLINABLE addSymbolicWme #-}
 
--- | Creates an empty WME
-createWme :: Env -> Symbol -> Symbol -> Symbol -> STM WME
+-- | Creates an empty Wme
+createWme :: Env -> Symbol -> Symbol -> Symbol -> STM Wme
 createWme env obj attr val = do
   id'       <- genid env
   amems     <- newTVar []
   toks      <- newTVar Set.empty
   njResults <- newTVar Set.empty
 
-  return WME { wmeId             = id'
+  return Wme { wmeId             = id'
              , wmeObj            = obj
              , wmeAttr           = attr
              , wmeVal            = val
@@ -273,7 +273,7 @@ createWme env obj attr val = do
 
 -- TOKENS CREATION AND UTILS
 
-makeToken :: Env -> Token -> Maybe WME -> Node -> STM Token
+makeToken :: Env -> Token -> Maybe Wme -> Node -> STM Token
 makeToken env parentTok wme node = do
   id'        <- genid env
   children   <- newTVar Set.empty
@@ -301,7 +301,7 @@ makeToken env parentTok wme node = do
 {-# INLINABLE makeToken #-}
 
 -- | Creates a token and adds it to the node.
-makeAndInsertToken :: Env -> Token -> Maybe WME -> Node -> STM Token
+makeAndInsertToken :: Env -> Token -> Maybe Wme -> Node -> STM Token
 makeAndInsertToken env tok wme node = do
   newTok <- makeToken env tok wme node
   modifyTVar' (vprop nodeTokens node) (Set.insert newTok)
@@ -311,7 +311,7 @@ makeAndInsertToken env tok wme node = do
 -- | Returns a sequence of wmes within the token. Every wme wrapped in
 -- a Maybe instance due to the fact that some tokens do not carry on
 -- any wme.
-tokenWmes :: Token -> [Maybe WME]
+tokenWmes :: Token -> [Maybe Wme]
 tokenWmes = map tokWme . tokWithAncestors
 {-# INLINE tokenWmes #-}
 
@@ -337,7 +337,7 @@ tokWithAncestors = map fromJust             -- safely strip-off Just
 {-# INLINABLE tokWithAncestors #-}
 
 -- | A safe (Maybe-aware) version of token wme accessor.
-safeTokWme :: Maybe Token -> Maybe WME
+safeTokWme :: Maybe Token -> Maybe Wme
 safeTokWme Nothing    = Nothing
 safeTokWme (Just tok) = tokWme tok
 {-# INLINE safeTokWme #-}
@@ -345,7 +345,7 @@ safeTokWme (Just tok) = tokWme tok
 -- RIGHT ACTIVATION DISPATCH
 
 -- | Right-activates the node with the passed wme
-rightActivate :: Env -> WME -> Node -> STM ()
+rightActivate :: Env -> Wme -> Node -> STM ()
 rightActivate env wme node = case nodeVariant node of
   JoinNode     {} -> rightActivateJoinNode     env wme node
   NegativeNode {} -> rightActivateNegativeNode env wme node
@@ -355,7 +355,7 @@ rightActivate env wme node = case nodeVariant node of
 -- LEFT ACTIVATION DISPATCH
 
 -- | Left-activates the node
-leftActivate :: Env -> Token -> Maybe WME -> Node -> STM ()
+leftActivate :: Env -> Token -> Maybe Wme -> Node -> STM ()
 leftActivate env tok wme node = case nodeVariant node of
   Bmem         {} -> leftActivateBmem         env tok wme node
   JoinNode     {} -> leftActivateJoinNode     env tok wme node
@@ -369,7 +369,7 @@ leftActivate env tok wme node = case nodeVariant node of
 -- β MEMORIES
 
 leftActivateBmem ::
-  Env -> Token -> Maybe WME -> Node -> STM ()
+  Env -> Token -> Maybe Wme -> Node -> STM ()
 leftActivateBmem env tok wme node = do
   newTok <- makeAndInsertToken env tok wme node
 
@@ -382,11 +382,11 @@ leftActivateBmem env tok wme node = do
 -- | Performs the join tests not using any kind of indexing. Useful
 -- while right-activation, when the α memory passes a single wme, so
 -- there is no use of the α memory indexing.
-performJoinTests :: [JoinTest] -> Token -> WME -> Bool
+performJoinTests :: [JoinTest] -> Token -> Wme -> Bool
 performJoinTests tests tok wme = all (passJoinTest tok wme) tests
 {-# INLINE performJoinTests #-}
 
-passJoinTest :: Token -> WME -> JoinTest -> Bool
+passJoinTest :: Token -> Wme -> JoinTest -> Bool
 passJoinTest tok wme test = value1 == value2
   where
     value1    = fieldValue (joinTestField1 test) wme
@@ -397,7 +397,7 @@ passJoinTest tok wme test = value1 == value2
 {-# INLINABLE passJoinTest #-}
 
 -- | Reaches a value of the wme in the specified field.
-fieldValue :: Field -> WME -> Symbol
+fieldValue :: Field -> Wme -> Symbol
 fieldValue Obj  = wmeObj
 fieldValue Attr = wmeAttr
 fieldValue Val  = wmeVal
@@ -406,7 +406,7 @@ fieldValue Val  = wmeVal
 -- INDEXED JOIN TESTS (USING α MEMORY INDEXES)
 
 -- | Matches a token to wmes in an α memory using the α memory indexes.
-matchingAmemWmes :: [JoinTest] -> Token -> Amem -> STM [WME]
+matchingAmemWmes :: [JoinTest] -> Token -> Amem -> STM [Wme]
 -- When no tests specified, we simply take all wmes from the α memory
 matchingAmemWmes [] _ amem = liftM Set.toList (readTVar (amemWmes amem))
 matchingAmemWmes tests tok amem = do
@@ -417,9 +417,9 @@ matchingAmemWmes tests tok amem = do
 {-# INLINABLE matchingAmemWmes #-}
 
 -- | Uses proper indexes of the α memory to return a set of wmes
--- matching the token (represented as a sequence of Maybe WME) wrt the
+-- matching the token (represented as a sequence of Maybe Wme) wrt the
 -- current test.
-amemWmesForTest :: [Maybe WME] -> Amem -> JoinTest -> STM (Set.HashSet WME)
+amemWmesForTest :: [Maybe Wme] -> Amem -> JoinTest -> STM (Set.HashSet Wme)
 amemWmesForTest wmes amem test = do
   index <- amemIndexForField (joinTestField1 test) amem
   return (Map.lookupDefault Set.empty value index)
@@ -435,7 +435,7 @@ amemWmesForTest wmes amem test = do
 -- JOIN NODES
 
 leftActivateJoinNode ::
-  Env -> Token -> Maybe WME -> Node -> STM ()
+  Env -> Token -> Maybe Wme -> Node -> STM ()
 leftActivateJoinNode env tok _ node = do
   let amem   = vprop nodeAmem node
       parent = nodeParent node
@@ -463,7 +463,7 @@ leftActivateJoinNode env tok _ node = do
   return ()
 {-# INLINABLE leftActivateJoinNode #-}
 
-rightActivateJoinNode :: Env -> WME -> Node -> STM ()
+rightActivateJoinNode :: Env -> Wme -> Node -> STM ()
 rightActivateJoinNode env wme node = do
   let amem   = vprop nodeAmem node
       parent = nodeParent node
@@ -495,7 +495,7 @@ rightActivateJoinNode env wme node = do
 -- NEGATIVE NODES
 
 leftActivateNegativeNode ::
-  Env -> Token -> Maybe WME -> Node -> STM ()
+  Env -> Token -> Maybe Wme -> Node -> STM ()
 leftActivateNegativeNode env tok wme node = do
   whenM (isRightUnlinked node) $
     -- The rightUnlinked status must be checked here because a
@@ -522,7 +522,7 @@ leftActivateNegativeNode env tok wme node = do
     mapMM_ (leftActivate env newTok Nothing) (readTVar (nodeChildren node))
 {-# INLINABLE leftActivateNegativeNode #-}
 
-rightActivateNegativeNode :: Env -> WME -> Node -> STM ()
+rightActivateNegativeNode :: Env -> Wme -> Node -> STM ()
 rightActivateNegativeNode env wme node  = do
   toks <- readTVar (vprop nodeTokens node)
   unless (Set.null toks) $ do
@@ -542,7 +542,7 @@ rightActivateNegativeNode env wme node  = do
 -- NCC NODES
 
 leftActivateNCCNode ::
-  Env -> Token -> Maybe WME -> Node -> STM ()
+  Env -> Token -> Maybe Wme -> Node -> STM ()
 leftActivateNCCNode env tok wme node = do
   -- Build and store a new token.
   newTok <- makeAndInsertToken env tok wme node
@@ -574,7 +574,7 @@ leftActivateNCCNode env tok wme node = do
 -- NCC PARNTER NODES
 
 leftActivateNCCPartner ::
-  Env -> Token -> Maybe WME -> Node -> STM ()
+  Env -> Token -> Maybe Wme -> Node -> STM ()
 leftActivateNCCPartner env tok wme partner = do
   nccNode   <- readTVar (vprop nccPartnerNccNode partner)
   newResult <- makeToken env tok wme partner
@@ -603,7 +603,7 @@ leftActivateNCCPartner env tok wme partner = do
 
 -- | Searches node.tokens for a tok such that tok.parent = ownersTok
 -- and tok.wme = ownersWme.
-findNccOwner :: Node -> Maybe Token -> Maybe WME -> STM (Maybe Token)
+findNccOwner :: Node -> Maybe Token -> Maybe Wme -> STM (Maybe Token)
 findNccOwner node ownersTok ownersWme = do
   tokens <- readTVar (vprop nodeTokens node)
   return $ headMay (filter matchingTok (Set.toList tokens))
@@ -620,7 +620,7 @@ findNccOwner node ownersTok ownersWme = do
 -- the pair that emerged from the join node for the condition preceding
 -- the NCC partner.
 -- [From the original Doorenbos thesis]
-findOwnersPair :: Int -> Maybe Token -> Maybe WME -> (Maybe Token, Maybe WME)
+findOwnersPair :: Int -> Maybe Token -> Maybe Wme -> (Maybe Token, Maybe Wme)
 findOwnersPair numberOfConjucts ownersTok ownersWme =
   if numberOfConjucts == 0
     then (ownersTok, ownersWme)
@@ -633,7 +633,7 @@ findOwnersPair numberOfConjucts ownersTok ownersWme =
 -- P(RODUCTION) NODES
 
 leftActivatePNode ::
-  Env -> Token -> Maybe WME -> Node -> STM ()
+  Env -> Token -> Maybe Wme -> Node -> STM ()
 leftActivatePNode env tok wme node  = do
   -- Create and insert a new token.
   newTok <- makeAndInsertToken env tok wme node
@@ -709,7 +709,7 @@ leftUnlink node parent = do
 
 -- Removes the fact described by 3 strings. Returns the removed wme or
 -- Nothing if the wme was not present in the working memory.
-removeWme :: Env -> String -> String -> String -> STM (Maybe WME)
+removeWme :: Env -> String -> String -> String -> STM (Maybe Wme)
 removeWme env obj attr val = do
   registry <- readTVar (envSymbolsRegistry env)
   let obj'  = internedSymbol obj  registry
@@ -729,10 +729,10 @@ removeWme env obj attr val = do
 
 -- Removes the fact described by 3 symbols. Returns the removed wme or
 -- Nothing if the wme was not present in the working memory.
-removeSymbolicWme :: Env -> Symbol -> Symbol -> Symbol -> STM (Maybe WME)
+removeSymbolicWme :: Env -> Symbol -> Symbol -> Symbol -> STM (Maybe Wme)
 removeSymbolicWme env obj attr val = do
   workingMemory <- readTVar (envWorkingMemory env)
-  let k         = WMEKey obj attr val
+  let k         = WmeKey obj attr val
       wmeLookup = Map.lookup k workingMemory
   case wmeLookup of
     Nothing  -> return Nothing
@@ -745,7 +745,7 @@ removeSymbolicWme env obj attr val = do
 -- | Propagates the wme removal down the Rete network. It is the
 -- actual implementation of original remove-wme procedure from the
 -- Doorenbos thesis.
-propagateWmeRemoval :: Env -> WME -> STM ()
+propagateWmeRemoval :: Env -> Wme -> STM ()
 propagateWmeRemoval _ _ = undefined
 {-# INLINE propagateWmeRemoval #-}
 

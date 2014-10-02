@@ -65,9 +65,9 @@ data Env =
   , envAmems :: {-# UNPACK #-} !(TVar AmemsRegistry)
   }
 
--- | Working Memory Element (WME)
-data WME =
-  WME
+-- | Working Memory Element (Wme)
+data Wme =
+  Wme
   {
     -- | An internal identifier of this wme
     wmeId :: {-# UNPACK #-} !ID
@@ -77,24 +77,24 @@ data WME =
   , wmeAttr :: !Symbol
   , wmeVal  :: !Symbol
 
-    -- | α-memories this WME belongs to (8 at most)
+    -- | α-memories this Wme belongs to (8 at most)
   , wmeAmems :: {-# UNPACK #-} !(TList Amem)
 
-    -- | Tokens with tokenWME = this wme.
+    -- | Tokens with tokenWme = this wme.
   , wmeTokens :: {-# UNPACK #-} !(TSet Token)
 
     -- | Negative join results in which this wme participates
   , wmeNegJoinResults :: {-# UNPACK #-} !(TSet NegativeJoinResult)
   }
 
-instance Show WME where
-  show WME {wmeObj=obj, wmeAttr=attr, wmeVal=val} =
+instance Show Wme where
+  show Wme {wmeObj=obj, wmeAttr=attr, wmeVal=val} =
     "(" ++ show obj  ++ "," ++ show attr ++ "," ++ show val  ++ ")"
 
-instance Eq WME where
+instance Eq Wme where
   wme1 == wme2 = wmeId wme1 == wmeId wme2
 
-instance Hashable WME where
+instance Hashable Wme where
   hashWithSalt salt wme = salt `hashWithSalt` wmeId wme
 
 -- | Token. We introduce the same structure for standard tokens and
@@ -108,8 +108,8 @@ data Token =
     -- | Points to a higher token
   , tokParent :: !Token
 
-    -- | i-th WME, Nothing for some tokens
-  , tokWme :: !(Maybe WME)
+    -- | i-th Wme, Nothing for some tokens
+  , tokWme :: !(Maybe Wme)
 
     -- | The node the token is in
   , tokNode :: !Node
@@ -150,7 +150,7 @@ instance Hashable Token where
 data Field = Obj | Attr | Val deriving (Show)
 
 -- | α Memory Index
-type AmemIndex = (Map.HashMap Symbol (Set.HashSet WME))
+type WmesIndex = (Map.HashMap Symbol (Set.HashSet Wme))
 
 -- | α Memory
 data Amem =
@@ -162,12 +162,12 @@ data Amem =
   , amemReferenceCount :: {-# UNPACK #-} !(TVar Int)
 
     -- | The wmes in this α memory (unindexed)
-  , amemWmes :: {-# UNPACK #-} !(TSet WME)
+  , amemWmes :: {-# UNPACK #-} !(TSet Wme)
 
     -- | Wmes are indexed by their Field value.
-  , amemWmesByObj  :: {-# UNPACK #-} !(TVar AmemIndex)
-  , amemWmesByAttr :: {-# UNPACK #-} !(TVar AmemIndex)
-  , amemWmesByVal  :: {-# UNPACK #-} !(TVar AmemIndex)
+  , amemWmesByObj  :: {-# UNPACK #-} !(TVar WmesIndex)
+  , amemWmesByAttr :: {-# UNPACK #-} !(TVar WmesIndex)
+  , amemWmesByVal  :: {-# UNPACK #-} !(TVar WmesIndex)
 
     -- | Keys to identify the α memory in the α memories registry
   , amemObj  :: !Symbol
@@ -300,7 +300,7 @@ data NegativeJoinResult =
   NegativeJoinResult
   {
     negativeJoinResultOwner :: !Token
-  , negativeJoinResultWme   :: !WME
+  , negativeJoinResultWme   :: !Wme
   }
   deriving (Eq)
 
@@ -310,7 +310,7 @@ instance Hashable NegativeJoinResult where
 
 -- | TokenLocation describes the binding for a variable within a token.
 data TokenLocation = TokenLocation
-                     !Field               -- ^ the field w in WME
+                     !Field               -- ^ the field w in Wme
                      {-# UNPACK #-} !Int  -- ^ distance within the token
 
 -- | A map of variable bindings for productions
@@ -323,18 +323,18 @@ type Action = Env        -- ^ Environment
               -> STM ()
 
 -- | The Working Memory key
-data WMEKey = WMEKey
+data WmeKey = WmeKey
               !Symbol  -- ^ obj
               !Symbol  -- ^ attr
               !Symbol  -- ^ val
             deriving Eq
 
-instance Hashable WMEKey where
-  hashWithSalt salt (WMEKey obj attr val) =
+instance Hashable WmeKey where
+  hashWithSalt salt (WmeKey obj attr val) =
     salt `hashWithSalt` obj `hashWithSalt` attr `hashWithSalt` val
 
--- | The Working Memory is actually a WME registry within the Env
-type WorkingMemory = (Map.HashMap WMEKey WME)
+-- | The Working Memory is actually a Wme registry within the Env
+type WorkingMemory = (Map.HashMap WmeKey Wme)
 
 -- | The registry of known α memories within the Env
-type AmemsRegistry = (Map.HashMap WMEKey Amem)
+type AmemsRegistry = (Map.HashMap WmeKey Amem)

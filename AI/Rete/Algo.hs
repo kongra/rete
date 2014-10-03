@@ -14,14 +14,18 @@
 -- Stability   : experimental
 -- Portability : requires stm
 --
+-- This module contains mechanisms of managing facts and propagating
+-- related within the Rete network.
 ------------------------------------------------------------------------
 module AI.Rete.Algo where
 
 import Data.Maybe (isJust, fromJust)
 import Data.Typeable
+
 import Control.Monad (when, unless, liftM, liftM2, forM_)
 import Control.Exception (Exception)
 import Control.Concurrent.STM
+
 import qualified Data.HashMap.Strict as Map
 import qualified Data.HashSet as Set
 

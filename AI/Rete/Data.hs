@@ -13,6 +13,7 @@
 -- Stability   : experimental
 -- Portability : requires stm
 --
+-- Contains the definitions of Rete data structures.
 ------------------------------------------------------------------------
 module AI.Rete.Data where
 

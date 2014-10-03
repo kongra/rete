@@ -25,6 +25,7 @@ library
   exposed-modules:     AI.Rete
                        AI.Rete.Data
                        AI.Rete.Algo
+                       AI.Rete.Net
   -- other-modules:
   other-extensions:    Safe
   build-depends:       base >=4.7 && <4.8,

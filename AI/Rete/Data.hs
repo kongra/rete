@@ -2,7 +2,7 @@
 #if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 702
 {-# LANGUAGE Trustworthy #-}
 #endif
-{-# OPTIONS_GHC -Wall #-}
+{-# OPTIONS_GHC -W -Wall #-}
 ------------------------------------------------------------------------
 -- |
 -- Module      : AI.Rete.Data
@@ -17,8 +17,8 @@
 ------------------------------------------------------------------------
 module AI.Rete.Data where
 
-import Control.Concurrent.STM
-import Data.Hashable (Hashable, hashWithSalt)
+import           Control.Concurrent.STM
+import           Data.Hashable (Hashable, hashWithSalt)
 
 import qualified Data.HashMap.Strict as Map
 import qualified Data.HashSet as Set

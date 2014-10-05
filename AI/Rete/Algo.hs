@@ -3,7 +3,7 @@
 #if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 702
 {-# LANGUAGE Trustworthy #-}
 #endif
-{-# OPTIONS_GHC -Wall #-}
+{-# OPTIONS_GHC -W -Wall #-}
 ------------------------------------------------------------------------
 -- |
 -- Module      : AI.Rete.Algo
@@ -19,19 +19,19 @@
 ------------------------------------------------------------------------
 module AI.Rete.Algo where
 
-import Data.Maybe (isJust, fromJust)
-import Data.Typeable
+import           Data.Maybe (isJust, fromJust)
+import           Data.Typeable
 
-import Control.Monad (when, unless, liftM, liftM2, forM_)
-import Control.Exception (Exception)
-import Control.Concurrent.STM
+import           Control.Monad (when, unless, liftM, liftM2, forM_)
+import           Control.Exception (Exception)
+import           Control.Concurrent.STM
 
 import qualified Data.HashMap.Strict as Map
 import qualified Data.HashSet as Set
 
-import Safe (headMay)
+import           Safe (headMay)
 
-import AI.Rete.Data
+import           AI.Rete.Data
 
 -- MISC. UTILS
 
@@ -942,4 +942,3 @@ deleteTokenAndDescendents env removeFromParent removeFromWme tok = do
     DTN      {} -> error "Deleting token(s) from Dummy Top Node is evil."
     JoinNode {} -> error "Can't happen."
 {-# INLINABLE deleteTokenAndDescendents #-}
-

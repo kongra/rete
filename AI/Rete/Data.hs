@@ -18,10 +18,9 @@
 module AI.Rete.Data where
 
 import           Control.Concurrent.STM
-import           Data.Hashable (Hashable, hashWithSalt)
-
 import qualified Data.HashMap.Strict as Map
 import qualified Data.HashSet as Set
+import           Data.Hashable (Hashable, hashWithSalt)
 
 type TList a = TVar [a]
 type TSet  a = TVar (Set.HashSet a)
@@ -343,3 +342,10 @@ type WmesRegistry = (Map.HashMap WmeKey Wme)
 
 -- | The registry of known α memories within the Env
 type AmemsRegistry = (Map.HashMap WmeKey Amem)
+
+-- | The condition of a production. C is a positive cond, Not - the
+-- negative one.
+data Cond = C   !String !String !String
+          | Not [Cond]
+
+            deriving (Show)

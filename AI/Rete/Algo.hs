@@ -19,61 +19,28 @@
 ------------------------------------------------------------------------
 module AI.Rete.Algo where
 
-import           Data.Maybe (isJust, fromJust)
-import           Data.Typeable
+import           AI.Rete.Data
 
-import           Control.Monad (when, unless, liftM, liftM2, forM_)
-import           Control.Exception (Exception)
 import           Control.Concurrent.STM
+import           Control.Exception (Exception)
+import           Control.Monad (when, unless, liftM, liftM2, forM_)
 
 import qualified Data.HashMap.Strict as Map
 import qualified Data.HashSet as Set
+import           Data.Maybe (isJust, fromJust)
+import           Data.Typeable
+
+import           Kask.Control.Monad
+import           Kask.Data.List
 
 import           Safe (headMay)
 
-import           AI.Rete.Data
-
 -- MISC. UTILS
-
--- | Inserts y before first occurence of x within the list. When y
--- does not occur in the list, returns the original list. Thanks to:
--- http://stackoverflow.com/questions/14774153/
---      a-function-that-inserts-element-y-before-first-occurrence-of-x
-insertBefore :: Eq a =>
-                a       -- ^ y - the element to insert
-                -> a    -- ^ x - the list member
-                -> [a]  -- ^ the list
-                -> [a]
-insertBefore _ _ [] = []
-insertBefore y x (a:as)
-  | a == x    = y:a:as
-  | otherwise = a : insertBefore y x as
-{-# INLINABLE insertBefore #-}
 
 -- | A monadic (in STM monad) version of Set.null
 nullTSet :: TSet a -> STM Bool
 nullTSet = liftM Set.null . readTVar
 {-# INLINE nullTSet #-}
-
--- | A version of when that works on m Bool rather than raw Bool.
-whenM :: Monad m => m Bool -> m () -> m ()
-whenM p s = p >>= flip when s
-{-# INLINE whenM #-}
-
--- | A version of unless that works on m Bool rather than raw Bool.
-unlessM :: Monad m => m Bool -> m () -> m ()
-unlessM p s = p >>= flip unless s
-{-# INLINE unlessM #-}
-
--- | A version of mapM_ that works on m [a] rather than raw [a].
-mapMM_ :: Monad m => (a -> m b) -> m [a] -> m ()
-mapMM_ f as = as >>= mapM_ f
-{-# INLINE mapMM_ #-}
-
--- | A version of forM_ that works on m [a] rather than raw [a].
-forMM_ :: Monad m => m [a] -> (a -> m b) -> m ()
-forMM_ = flip mapMM_
-{-# INLINE forMM_ #-}
 
 -- VARIANTS
 
@@ -517,8 +484,6 @@ leftActivateJoinNode env tok _ node = do
         let wme' = Just wme
         forM_ children $ \child ->
           leftActivate env tok wme' child
-
-  return ()
 {-# INLINABLE leftActivateJoinNode #-}
 
 rightActivateJoinNode :: Env -> Wme -> Node -> STM ()
@@ -699,7 +664,6 @@ leftActivatePNode env tok wme node  = do
   -- Fire the proper action.
   let action = vprop pnodeAction node
   action env node newTok
-  return ()
 {-# INLINABLE leftActivatePNode #-}
 
 -- LINKING/UNLINKING
@@ -935,9 +899,7 @@ deleteTokenAndDescendents env removeFromParent removeFromWme tok = do
       -- proper action.
       case vprop pnodeRevokeAction node of
         Nothing     -> return ()
-        Just action -> do
-          action env node tok
-          return ()
+        Just action -> action env node tok
 
     DTN      {} -> error "Deleting token(s) from Dummy Top Node is evil."
     JoinNode {} -> error "Can't happen."

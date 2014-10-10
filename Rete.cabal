@@ -32,7 +32,8 @@ library
                        stm >= 2.4.3,
                        unordered-containers >= 0.2.5.0,
                        hashable >= 1.2.2.0,
-                       safe >= 0.3.8
+                       safe >= 0.3.8,
+                       kask >= 0.1.0
   -- hs-source-dirs:      src
   default-language:    Haskell2010
 

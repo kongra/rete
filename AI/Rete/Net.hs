@@ -17,3 +17,11 @@
 -- structure.
 ------------------------------------------------------------------------
 module AI.Rete.Net where
+
+import AI.Rete.Data
+import Control.Concurrent.STM
+
+-- | Reaches for an existing alpha memory for the given symbols or
+-- creates a new one.
+buildOrShareAmem :: Env -> Symbol -> Symbol -> Symbol -> STM Amem
+buildOrShareAmem _ _ _ _ = undefined

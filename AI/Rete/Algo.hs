@@ -30,8 +30,8 @@ import qualified Data.HashSet as Set
 import           Data.Maybe (isJust, fromJust)
 import           Data.Typeable
 
-import           Kask.Control.Monad
-import           Kask.Data.List
+import           Kask.Control.Monad (whenM, unlessM, mapMM_, forMM_)
+import           Kask.Data.List (insertBefore)
 
 import           Safe (headMay)
 

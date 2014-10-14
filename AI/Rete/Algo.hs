@@ -87,7 +87,7 @@ createEnv = do
              , envWmesByObj       = objs
              , envWmesByAttr      = attrs
              , envWmesByVal       = vals
-             , envAmems           = amems}
+             , envAmems           = amems }
 {-# INLINABLE createEnv #-}
 
 -- | Generates a new ID
@@ -238,6 +238,7 @@ feedAmem :: Env -> Wme -> Symbol -> Symbol -> Symbol -> STM ()
 feedAmem env wme obj attr val = do
   amems <- readTVar (envAmems env)
   case Map.lookup (WmeKey obj attr val) amems of
+    -- Activate amem propagating to successors.
     Just amem -> activateAmem env amem wme
     Nothing   -> return ()
 {-# INLINABLE feedAmem #-}
@@ -293,7 +294,7 @@ createWme env obj attr val = do
              , wmeVal            = val
              , wmeAmems          = amems
              , wmeTokens         = toks
-             , wmeNegJoinResults = njResults}
+             , wmeNegJoinResults = njResults }
 {-# INLINE createWme #-}
 
 -- TOKENS CREATION AND UTILS

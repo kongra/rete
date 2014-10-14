@@ -1,5 +1,5 @@
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DeriveDataTypeable, FlexibleInstances #-}
 #if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 702
 {-# LANGUAGE Trustworthy #-}
 #endif
@@ -177,6 +177,19 @@ internSymbolImpl env name constr = do
       return s
 {-# INLINABLE internSymbolImpl #-}
 
+-- | Converts the S object into a Symbol.
+sToSymbol :: Env -> S -> STM Symbol
+sToSymbol _   (Sym s) = return s
+sToSymbol env (S   s) = internSymbol env s
+{-# INLINE sToSymbol #-}
+
+-- | Converts the S object into a Symbol, but only if the symbol was
+-- interned into the registry of symbols. If not - returns Nothing.
+sToMaybeSymbol :: SymbolsRegistry -> S -> Maybe Symbol
+sToMaybeSymbol _        (Sym s) = Just s
+sToMaybeSymbol registry (S   s) = internedSymbol s registry
+{-# inline sToMaybeSymbol #-}
+
 -- WMES INDEXES MANIPULATION
 
 -- | Creates an updated version of the wme index by putting a new
@@ -245,40 +258,45 @@ feedAmem env wme obj attr val = do
 
 -- WMES, ADDING
 
--- | Adds the fact represented by the strings to the working memory
--- and propagates the change downwards the Rete network. Returns the
--- corresponding Wme. If the fact was already present, nothing happens.
-addWme :: Env -> String -> String -> String -> STM (Maybe Wme)
-addWme env obj attr val = do
-  obj'  <- internSymbol env obj
-  attr' <- internSymbol env attr
-  val'  <- internSymbol env val
-  addSymbolicWme env obj' attr' val'
-{-# INLINABLE addWme #-}
+class AddWme a where
+  -- | Adds the fact represented by the strings to the working memory
+  -- and propagates the change downwards the Rete network. Returns the
+  -- corresponding Wme. If the fact was already present, nothing happens.
+  addWme :: Env -> a -> a -> a -> STM (Maybe Wme)
 
--- | Adds the fact represented by the symbols to the working memory
--- and propagates the change downwards the Rete network. Returns the
--- corresponding Wme. If the fact was already present, nothing happens.
-addSymbolicWme :: Env -> Symbol -> Symbol -> Symbol -> STM (Maybe Wme)
-addSymbolicWme env obj attr val = do
-  let wmesRegistry = envWmesRegistry env
-  wr <- readTVar wmesRegistry
-  let k = WmeKey obj attr val
+instance AddWme String where
+  addWme env obj attr val = do
+    obj'  <- internSymbol env obj
+    attr' <- internSymbol env attr
+    val'  <- internSymbol env val
+    addWme env obj' attr' val'
 
-  if Map.member k wr
-    then return Nothing  -- Already present, do nothing.
-    else do
-      wme <- createWme env obj attr val
-      -- Add to the global wmes registry under key k.
-      writeTVar wmesRegistry $! Map.insert k wme wr
+instance AddWme S where
+  addWme env obj attr val = do
+    obj'  <- sToSymbol env obj
+    attr' <- sToSymbol env attr
+    val'  <- sToSymbol env val
+    addWme env obj' attr' val'
 
-      -- Add to indices, including the wildcard symbol key.
-      updateEnvIndexes wmesIndexInsert env wme
+instance AddWme Symbol where
+  addWme env obj attr val = do
+    let wmesRegistry = envWmesRegistry env
+    wr <- readTVar wmesRegistry
+    let k = WmeKey obj attr val
 
-      -- Propagate into the α memories.
-      feedAmems env wme obj attr val
-      return (Just wme)
-{-# INLINABLE addSymbolicWme #-}
+    if Map.member k wr
+      then return Nothing  -- Already present, do nothing.
+      else do
+        wme <- createWme env obj attr val
+        -- Add to the global wmes registry under key k.
+        writeTVar wmesRegistry $! Map.insert k wme wr
+
+        -- Add to indices, including the wildcard symbol key.
+        updateEnvIndexes wmesIndexInsert env wme
+
+        -- Propagate into the α memories.
+        feedAmems env wme obj attr val
+        return (Just wme)
 
 -- | Creates an empty Wme
 createWme :: Env -> Symbol -> Symbol -> Symbol -> STM Wme
@@ -730,45 +748,55 @@ leftUnlink node parent = do
 
 -- REMOVING WMES
 
--- Removes the fact described by 3 strings. Returns the removed wme or
--- Nothing if the wme was not present in the working memory.
-removeWme :: Env -> String -> String -> String -> STM (Maybe Wme)
-removeWme env obj attr val = do
-  registry <- readTVar (envSymbolsRegistry env)
-  let obj'  = internedSymbol obj  registry
-      attr' = internedSymbol attr registry
-      val'  = internedSymbol val  registry
+class RemoveWme a where
+  -- Removes the fact described by 3 symbols. Returns the removed wme
+  -- or Nothing if the wme was not present in the working memory.
+  removeWme :: Env -> a -> a -> a -> STM (Maybe Wme)
 
-  if isJust obj' && isJust attr' && isJust val'
-    then removeSymbolicWme env
-         (fromJust obj')
-         (fromJust attr')
-         (fromJust val')
+instance RemoveWme String where
+  removeWme env obj attr val = do
+    registry <- readTVar (envSymbolsRegistry env)
+    let obj'  = internedSymbol obj  registry
+        attr' = internedSymbol attr registry
+        val'  = internedSymbol val  registry
 
-    -- At least 1 of the names didn't have a corresponding interned
-    -- symbol, the wme can't exist.
-    else return Nothing
-{-# INLINABLE removeWme #-}
+    if isJust obj' && isJust attr' && isJust val'
+      then removeWme env (fromJust obj') (fromJust attr') (fromJust val')
 
--- Removes the fact described by 3 symbols. Returns the removed wme or
--- Nothing if the wme was not present in the working memory.
-removeSymbolicWme :: Env -> Symbol -> Symbol -> Symbol -> STM (Maybe Wme)
-removeSymbolicWme env obj attr val = do
-  let wmesRegistry = envWmesRegistry env
-  wr <- readTVar wmesRegistry
-  let k      = WmeKey obj attr val
-      wmeLookup = Map.lookup k wr
+      -- At least 1 of the names didn't have a corresponding interned
+      -- symbol, the wme can't exist.
+      else return Nothing
 
-  case wmeLookup of
-    Nothing  -> return Nothing
-    Just wme -> do
-      -- Remove from Working Memory (Env registry and indices)
-      writeTVar wmesRegistry $! Map.delete k wr
-      updateEnvIndexes wmesIndexDelete env wme
-      -- ... and propagate down the network.
-      propagateWmeRemoval env wme
-      return wmeLookup
-{-# INLINABLE removeSymbolicWme #-}
+instance RemoveWme S where
+  removeWme env obj attr val = do
+    registry <- readTVar (envSymbolsRegistry env)
+    let obj'  = sToMaybeSymbol registry obj
+        attr' = sToMaybeSymbol registry attr
+        val'  = sToMaybeSymbol registry val
+
+    if isJust obj' && isJust attr' && isJust val'
+      then removeWme env (fromJust obj') (fromJust attr') (fromJust val')
+
+      -- At least 1 of the names didn't have a corresponding interned
+      -- symbol, the wme can't exist.
+      else return Nothing
+
+instance RemoveWme Symbol where
+  removeWme env obj attr val = do
+    let wmesRegistry = envWmesRegistry env
+    wr <- readTVar wmesRegistry
+    let k      = WmeKey obj attr val
+        wmeLookup = Map.lookup k wr
+
+    case wmeLookup of
+      Nothing  -> return Nothing
+      Just wme -> do
+        -- Remove from Working Memory (Env registry and indices)
+        writeTVar wmesRegistry $! Map.delete k wr
+        updateEnvIndexes wmesIndexDelete env wme
+        -- ... and propagate down the network.
+        propagateWmeRemoval env wme
+        return wmeLookup
 
 -- | Propagates the wme removal down the Rete network. It is the
 -- actual implementation of original remove-wme procedure from the

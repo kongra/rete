@@ -106,7 +106,7 @@ activateAmemOnCreation env amem obj attr val = do
 
 -- BETA MEMORY CREATION
 
--- | Returns True iff the node is an NCC partner.
+-- | Returns True iff the node is a Bmem node.
 isBmem :: Node -> Bool
 isBmem node = case nodeVariant node of
   (Bmem {}) -> True
@@ -143,6 +143,14 @@ buildOrShareBmem env parent = do
       -- We're done.
       return node
 {-# INLINABLE buildOrShareBmem #-}
+
+-- JOIN TESTS
+
+-- c1 :: Cond
+-- c1 = C "Ala" "ma" "psa"
+
+-- c2 :: Cond
+-- c2 = CS
 
 -- | Performs a propagation of changes on new nodes creation.
 updateNewNodeWithMatchesFromAbove :: Env -> Node -> STM ()

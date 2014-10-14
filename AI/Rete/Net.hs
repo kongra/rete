@@ -91,7 +91,7 @@ activateAmemOnCreation env amem obj attr val = do
                            wmesMatchingByVal
 
   -- Put all matching wmes into the amem
-  writeTVar (amemWmes amem) wmesMatching
+  writeTVar (amemWmes amem) $!  wmesMatching
 
   -- Iteratively work on every wme
   forM_ (Set.toList wmesMatching) $ \wme -> do
@@ -103,3 +103,47 @@ activateAmemOnCreation env amem obj attr val = do
     modifyTVar' (amemWmesByAttr amem) (wmesIndexInsert (wmeAttr wme) wme)
     modifyTVar' (amemWmesByVal  amem) (wmesIndexInsert (wmeVal  wme) wme)
 {-# INLINE activateAmemOnCreation #-}
+
+-- BETA MEMORY CREATION
+
+-- | Returns True iff the node is an NCC partner.
+isBmem :: Node -> Bool
+isBmem node = case nodeVariant node of
+  (Bmem {}) -> True
+  _         -> False
+{-# INLINABLE isBmem #-}
+
+-- | Creates a new beta memory or returns a shared one if possible.
+buildOrShareBmem :: Env -> Node -> STM Node
+buildOrShareBmem env parent = do
+  parentChildren <- readTVar (nodeChildren parent)
+  let bmems = filter isBmem parentChildren
+  if not (null bmems)
+    then return (head bmems)
+    else do
+      -- Create new Bmem variant
+      tokens      <- newTVar Set.empty
+      allChildren <- newTVar Set.empty
+      let variant = Bmem { nodeTokens      = tokens
+                         , bmemAllChildren = allChildren }
+      -- Create new node
+      id'      <- genid env
+      children <- newTVar []
+      let node = Node { nodeId       = id'
+                      , nodeParent   = parent
+                      , nodeChildren = children
+                      , nodeVariant  = variant }
+
+      -- Add node to parent's children
+      writeTVar (nodeChildren parent) $! (node:parentChildren)
+
+      -- Update with matches from above.
+      updateNewNodeWithMatchesFromAbove env node
+
+      -- We're done.
+      return node
+{-# INLINABLE buildOrShareBmem #-}
+
+-- | Performs a propagation of changes on new nodes creation.
+updateNewNodeWithMatchesFromAbove :: Env -> Node -> STM ()
+updateNewNodeWithMatchesFromAbove _ _ = undefined

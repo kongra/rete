@@ -343,21 +343,6 @@ type WmesRegistry = (Map.HashMap WmeKey Wme)
 -- | The registry of known α memories within the Env
 type AmemsRegistry = (Map.HashMap WmeKey Amem)
 
--- -- | Symbol inside a production conditional. May be either a string or
--- -- a Symbol instance.
--- data CondSymbol = S  !Symbol
---                 | St !String
-
--- instance Show CondSymbol where
---   show (S  symbol) = show symbol
---   show (St symbol) = symbol
-
--- -- | The condition of a production.
--- data Cond = C   !String     !String     !String
---           | CS  !CondSymbol !CondSymbol !CondSymbol
---           | Not [Cond]
---   deriving (Show)
-
 -- | The user-view representation of symbols.
 data S = S   !String
        | Sym !Symbol

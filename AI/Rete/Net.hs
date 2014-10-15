@@ -23,7 +23,7 @@ import           AI.Rete.Data
 import           Control.Concurrent.STM
 import           Control.Monad (forM_)
 import qualified Data.HashMap.Strict as Map
-import qualified Data.HashSet as Set
+import qualified Data.HashSet        as Set
 
 -- | Tells whether or not the Symbols is a Variable.
 isVariable :: Symbol -> Bool
@@ -143,14 +143,6 @@ buildOrShareBmem env parent = do
       -- We're done.
       return node
 {-# INLINABLE buildOrShareBmem #-}
-
--- JOIN TESTS
-
--- c1 :: Cond
--- c1 = C "Ala" "ma" "psa"
-
--- c2 :: Cond
--- c2 = CS
 
 -- | Performs a propagation of changes on new nodes creation.
 updateNewNodeWithMatchesFromAbove :: Env -> Node -> STM ()

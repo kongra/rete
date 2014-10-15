@@ -343,7 +343,7 @@ type WmesRegistry = (Map.HashMap WmeKey Wme)
 -- | The registry of known α memories within the Env
 type AmemsRegistry = (Map.HashMap WmeKey Amem)
 
--- | The user-view representation of symbols.
+-- | The user-friendly representation of symbols.
 data S = S   !String
        | Sym !Symbol
 
@@ -352,7 +352,10 @@ instance Show S where
   show (Sym s) = show s
 
 -- | The condition of a production.
-data Cond = C   !String !String !String
-          | CS  !S      !S      !S
-          | Not ![Cond]
-  deriving (Show)
+data Cond = StringCond !String !String !String
+          | SCond      !S      !S      !S
+
+          -- Canonical forms
+          | PositiveCond !Symbol !Symbol !Symbol
+          | Neg !Cond
+          | Ncc ![Cond] deriving (Show)

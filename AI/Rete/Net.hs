@@ -23,7 +23,8 @@ import           AI.Rete.Data
 import           Control.Concurrent.STM
 import           Control.Monad (forM_, liftM, liftM3)
 import qualified Data.HashMap.Strict as Map
-import qualified Data.HashSet        as Set
+import qualified Data.HashSet as Set
+import           Data.Maybe (isJust, fromJust)
 
 -- | Tells whether or not the Symbols is a Variable.
 isVariable :: Symbol -> Bool
@@ -144,6 +145,22 @@ buildOrShareBmem env parent = do
       return node
 {-# INLINABLE buildOrShareBmem #-}
 
+-- | Tells whether or not the Cond is a positive one.
+isPosCond :: Cond -> Bool
+isPosCond PosCond {} = True
+isPosCond PosStr  {} = True
+isPosCond PosS    {} = True
+isPosCond _          = False
+{-# INLINE isPosCond #-}
+
+-- | Tells whether or not the Cond is a negative one.
+isNegCond :: Cond -> Bool
+isNegCond NegCond {} = True
+isNegCond NegStr  {} = True
+isNegCond NegS    {} = True
+isNegCond _          = False
+{-# INLINE isNegCond #-}
+
 -- | Puts the Cond into it's canonical form.
 canonicalCond :: Env -> Cond -> STM Cond
 
@@ -161,6 +178,7 @@ canonicalCond env (NegStr obj attr val) =
   cctrans env NegCond internSymbol obj attr val
 canonicalCond env (NegS obj attr val) =
   cctrans env NegCond sToSymbol obj attr val
+{-# INLINABLE canonicalCond #-}
 
 cctrans :: Env
            -> (Symbol -> Symbol -> Symbol -> Cond)
@@ -169,12 +187,50 @@ cctrans :: Env
            -> STM Cond
 cctrans env constr trans obj attr val =
   liftM3 constr (trans env obj) (trans env attr) (trans env val)
+{-# INLINE cctrans #-}
 
 -- JOIN TESTS
 
 -- | Extracts and returns join tests for the given condition.
--- joinTestsFromCondition :: Cond -> [Cond] -> [JoinTest]
--- joinTestsFromCondition c earlierConds = undefined
+joinTestsFromCondition :: Cond -> [Cond] -> [JoinTest]
+joinTestsFromCondition (PosCond obj attr val) earlierConds =
+  joinTestsFromConditionImpl obj attr val earlierConds
+joinTestsFromCondition (NegCond obj attr val) earlierConds =
+  joinTestsFromConditionImpl obj attr val earlierConds
+joinTestsFromCondition cond@_ _ = error $
+  "Join tests may be extracted only from PosCond or NegCond, given" ++
+  show cond
+
+-- | The actual implementation for joinTestsFromCondition that
+-- uniformy works on symbols.
+joinTestsFromConditionImpl :: Symbol
+                           -> Symbol
+                           -> Symbol
+                           -> [Cond]
+                           -> [JoinTest]
+joinTestsFromConditionImpl obj attr val earlierConds =
+  let econds  = reverse earlierConds
+      test1   = joinTestFromField Obj  obj  econds
+      test2   = joinTestFromField Attr attr econds
+      test3   = joinTestFromField Val  val  econds
+
+      result1 = [fromJust test3 | isJust test3]
+      result2 = if isJust test2 then fromJust test2 : result1 else result1
+      result3 = if isJust test1 then fromJust test1 : result2 else result2
+  in
+   result3
+
+data IndexedCond  = IndexedCond  !Cond  !Int
+data IndexedField = IndexedField !Field !Int
+
+-- | An utility that prepares earlier conds for the process of
+-- extracting join tests.
+-- prepareIndexedPositiveEarlierConds :: [Cond] -> [IndexedCond]
+-- prepareIndexedPositiveEarlierConds earlierConds =
+--   zip (reverse earlierConds) [1 ..]
+
+joinTestFromField :: Field -> Symbol -> [Cond] -> Maybe JoinTest
+joinTestFromField _ _ _ = undefined
 
 -- PROPAGATING CHANGES
 

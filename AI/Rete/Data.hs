@@ -30,8 +30,8 @@ type TSet  a = TVar (Set.HashSet a)
 type ID = Int
 
 -- | Symbols (including Variables)
-data Symbol = Symbol   {-# UNPACK #-} !ID !String
-            | Variable {-# UNPACK #-} !ID !String
+data Symbol = Symbol   !ID !String
+            | Variable !ID !String
 
 -- | The registry of Symbols
 type SymbolsRegistry = Map.HashMap String Symbol
@@ -53,20 +53,20 @@ instance Hashable Symbol where
 data Env =
   Env
   { -- | The state of the Env-wide ID generator
-    envId :: {-# UNPACK #-} !(TVar ID)
+    envId :: !(TVar ID)
 
     -- | The registry of (interned) Symbols
-  , envSymbolsRegistry :: {-# UNPACK #-} !(TVar SymbolsRegistry)
+  , envSymbolsRegistry :: !(TVar SymbolsRegistry)
 
     -- | The Working Memory consists of a registry of all Wmes
     -- (indexed by WmeKey) and 3 Wme indexes by Wme Field value.
-  , envWmesRegistry :: {-# UNPACK #-} !(TVar WmesRegistry)
-  , envWmesByObj    :: {-# UNPACK #-} !(TVar WmesIndex)
-  , envWmesByAttr   :: {-# UNPACK #-} !(TVar WmesIndex)
-  , envWmesByVal    :: {-# UNPACK #-} !(TVar WmesIndex)
+  , envWmesRegistry :: !(TVar WmesRegistry)
+  , envWmesByObj    :: !(TVar WmesIndex)
+  , envWmesByAttr   :: !(TVar WmesIndex)
+  , envWmesByVal    :: !(TVar WmesIndex)
 
     -- | The registry of known α memories
-  , envAmems :: {-# UNPACK #-} !(TVar AmemsRegistry)
+  , envAmems :: !(TVar AmemsRegistry)
   }
 
 -- | Working Memory Element (Wme)
@@ -74,7 +74,7 @@ data Wme =
   Wme
   {
     -- | An internal identifier of this wme
-    wmeId :: {-# UNPACK #-} !ID
+    wmeId :: !ID
 
     -- | fields
   , wmeObj  :: !Symbol
@@ -82,13 +82,13 @@ data Wme =
   , wmeVal  :: !Symbol
 
     -- | α-memories this Wme belongs to (8 at most)
-  , wmeAmems :: {-# UNPACK #-} !(TList Amem)
+  , wmeAmems :: !(TList Amem)
 
     -- | Tokens with tokenWme = this wme.
-  , wmeTokens :: {-# UNPACK #-} !(TSet Token)
+  , wmeTokens :: !(TSet Token)
 
     -- | Negative join results in which this wme participates
-  , wmeNegJoinResults :: {-# UNPACK #-} !(TSet NegativeJoinResult)
+  , wmeNegJoinResults :: !(TSet NegativeJoinResult)
   }
 
 instance Show Wme where
@@ -107,7 +107,7 @@ data Token =
   Token
   {
     -- | An internal identifier of the token
-    tokId :: {-# UNPACK #-} !ID
+    tokId :: !ID
 
     -- | Points to a higher token
   , tokParent :: !Token
@@ -119,17 +119,17 @@ data Token =
   , tokNode :: !Node
 
     -- | The Tokens with parent = this
-  , tokChildren :: {-# UNPACK #-} !(TSet Token)
+  , tokChildren :: !(TSet Token)
 
     -- | Used only for Tokens in negative nodes
-  , tokNegJoinResults :: {-# UNPACK #-} !(TSet NegativeJoinResult)
+  , tokNegJoinResults :: !(TSet NegativeJoinResult)
 
     -- | Similar to tokNegJoinResults but for NCC nodes
-  , tokNccResults :: {-# UNPACK #-} !(TSet Token)
+  , tokNccResults :: !(TSet Token)
 
     -- | On Tokens in NCC partners: tokens in whose local memory this
     -- result resides
-  , tokOwner :: {-# UNPACK #-} !(TVar (Maybe Token))
+  , tokOwner :: !(TVar (Maybe Token))
   }
   |
   DummyTopToken
@@ -138,7 +138,7 @@ data Token =
     tokNode :: !Node
 
     -- | The Tokens with parent = this
-  , tokChildren :: {-# UNPACK #-} !(TSet Token)
+  , tokChildren :: !(TSet Token)
   }
 
 instance Eq Token where
@@ -160,18 +160,18 @@ type WmesIndex = (Map.HashMap Symbol (Set.HashSet Wme))
 data Amem =
   Amem
   { -- | Successors must be a list, cause the ordering matters.
-    amemSuccessors :: {-# UNPACK #-} !(TList Node)
+    amemSuccessors :: !(TList Node)
 
     -- | The number of join or negative node using this Amem
-  , amemReferenceCount :: {-# UNPACK #-} !(TVar Int)
+  , amemReferenceCount :: !(TVar Int)
 
     -- | The wmes in this α memory (unindexed)
-  , amemWmes :: {-# UNPACK #-} !(TSet Wme)
+  , amemWmes :: !(TSet Wme)
 
     -- | Wmes are indexed by their Field value.
-  , amemWmesByObj  :: {-# UNPACK #-} !(TVar WmesIndex)
-  , amemWmesByAttr :: {-# UNPACK #-} !(TVar WmesIndex)
-  , amemWmesByVal  :: {-# UNPACK #-} !(TVar WmesIndex)
+  , amemWmesByObj  :: !(TVar WmesIndex)
+  , amemWmesByAttr :: !(TVar WmesIndex)
+  , amemWmesByVal  :: !(TVar WmesIndex)
 
     -- | Keys to identify the α memory in the α memories registry
   , amemObj  :: !Symbol
@@ -183,13 +183,13 @@ data Amem =
 data Node =
   Node
   {
-    nodeId :: {-# UNPACK #-} !ID -- ^ an internal ID
+    nodeId :: !ID -- ^ an internal ID
 
   , nodeParent :: !Node
 
     -- | children must be a list, because the ordering matters,
     -- e.g. for NCC networks
-  , nodeChildren :: {-# UNPACK #-} !(TList Node)
+  , nodeChildren :: !(TList Node)
 
   , nodeVariant :: !NodeVariant
   }
@@ -198,7 +198,7 @@ data Node =
   {
     -- | children must be a list, because the ordering matters,
     -- e.g. for NCC networks
-    nodeChildren :: {-# UNPACK #-} !(TList Node)
+    nodeChildren :: !(TList Node)
 
   , nodeVariant :: !NodeVariant  -- DTN
   }
@@ -212,19 +212,19 @@ data NodeVariant =
   DTN
   {
     -- | Like in a β memory, but contains only a single DummyTopToken.
-    nodeTokens :: {-# UNPACK #-} !(TSet Token)
+    nodeTokens :: !(TSet Token)
 
     -- | Like in a β memory (see below)
-  , bmemAllChildren :: {-# UNPACK #-} !(TSet Node)
+  , bmemAllChildren :: !(TSet Node)
   }
   |
   Bmem
   {
-    nodeTokens :: {-# UNPACK #-} !(TSet Token)
+    nodeTokens :: !(TSet Token)
 
     -- | With left unlinking, we need this list to be able to find and
     -- share also the currently left-unlinked nodes.
-  , bmemAllChildren :: {-# UNPACK #-} !(TSet Node)
+  , bmemAllChildren :: !(TSet Node)
   }
   |
   JoinNode
@@ -235,13 +235,13 @@ data NodeVariant =
 
   , joinTests :: ![JoinTest]
 
-  , leftUnlinked  :: {-# UNPACK #-} !(TVar Bool)
-  , rightUnlinked :: {-# UNPACK #-} !(TVar Bool)
+  , leftUnlinked  :: !(TVar Bool)
+  , rightUnlinked :: !(TVar Bool)
   }
   |
   NegativeNode
   {
-    nodeTokens :: {-# UNPACK #-} !(TSet Token)
+    nodeTokens :: !(TSet Token)
 
     -- | The α memory this node is attached to (like for JoinNode)
   , nodeAmem :: !Amem
@@ -250,12 +250,12 @@ data NodeVariant =
   , nearestAncestorWithSameAmem :: !(Maybe Node)
 
     -- | There is no left unlinking for negative nodes
-  , rightUnlinked :: {-# UNPACK #-} !(TVar Bool)
+  , rightUnlinked :: !(TVar Bool)
   }
   |
   NCCNode
   {
-    nodeTokens :: {-# UNPACK #-} !(TSet Token)
+    nodeTokens :: !(TSet Token)
   , nccPartner :: !Node  -- ^ with NCCPartner variant
   }
   |
@@ -263,17 +263,17 @@ data NodeVariant =
   {
     -- | A corresponding NCC node, must be a TVar because of the
     -- circular dependency. See nccPartner in NCCNode variant.
-    nccPartnerNccNode :: {-# UNPACK #-} !(TVar Node)
+    nccPartnerNccNode :: !(TVar Node)
 
-  , nccPartnerNumberOfConjucts :: {-# UNPACK #-} !Int
+  , nccPartnerNumberOfConjucts :: !Int
 
     -- | Results for the match the NCC node hasn't heard about
-  , nccPartnerNewResultBuffer :: {-# UNPACK #-} !(TSet Token)
+  , nccPartnerNewResultBuffer :: !(TSet Token)
   }
   |
   PNode
   {
-    nodeTokens :: {-# UNPACK #-} !(TSet Token)
+    nodeTokens :: !(TSet Token)
 
   , pnodeName :: !String  -- ^ Name of the production
 
@@ -296,7 +296,7 @@ data JoinTest =
   {
     joinTestField1   :: !Field
   , joinTestField2   :: !Field
-  , joinTestDistance :: {-# UNPACK #-} !Int
+  , joinTestDistance :: !Int
   }
 
 -- | NegativeJoinResult
@@ -315,7 +315,7 @@ instance Hashable NegativeJoinResult where
 -- | TokenLocation describes the binding for a variable within a token.
 data TokenLocation = TokenLocation
                      !Field               -- ^ the field w in Wme
-                     {-# UNPACK #-} !Int  -- ^ distance within the token
+                     !Int  -- ^ distance within the token
 
 -- | A map of variable bindings for productions
 type VariableBindings = Map.HashMap Symbol TokenLocation

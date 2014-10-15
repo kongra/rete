@@ -19,6 +19,7 @@ module AI.Rete
     (
       c
     , neg
+    , ncc
     ) where
 
 import AI.Rete.Data
@@ -27,14 +28,18 @@ import AI.Rete.Data
 -- with various types of arguments.
 class C a where c :: a -> a -> a -> Cond
 
-instance C String where c = StringCond
-instance C S      where c = SCond
-instance C Symbol where c = PositiveCond
+instance C String where c = PosStr
+instance C S      where c = PosS
+instance C Symbol where c = PosCond
 
--- | Creates either a negative condition or a NCC condition if
--- multiple subconds are passed. The argument must not be empty.
-neg :: [Cond] -> Cond
-neg [] = error "neg(ation) must have at least 1 subcondition."
-neg conds@(x:xs) | null xs   = Neg x
-                 | otherwise = Ncc conds
-{-# INLINABLE neg #-}
+class Neg a where neg :: a -> a -> a -> Cond
+instance Neg String where neg = NegStr
+instance Neg S      where neg = NegS
+instance Neg Symbol where neg = NegCond
+
+-- | Creates a negated conjunction condition.
+ncc :: [Cond] -> Cond
+ncc []      = error "Ncc must have at least 2 subconditions, [] given."
+ncc [_]     = error "Ncc must have at least 2 subconditions, 1 given."
+ncc conds@_ = Ncc conds
+{-# INLINABLE ncc #-}

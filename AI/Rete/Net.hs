@@ -21,7 +21,7 @@ module AI.Rete.Net where
 import           AI.Rete.Algo
 import           AI.Rete.Data
 import           Control.Concurrent.STM
-import           Control.Monad (forM_, liftM)
+import           Control.Monad (forM_, liftM, liftM3)
 import qualified Data.HashMap.Strict as Map
 import qualified Data.HashSet        as Set
 
@@ -144,24 +144,42 @@ buildOrShareBmem env parent = do
       return node
 {-# INLINABLE buildOrShareBmem #-}
 
--- Puts the Cond into it's canonical form.
+-- | Puts the Cond into it's canonical form.
 canonicalCond :: Env -> Cond -> STM Cond
-canonicalCond _ cond@PositiveCond {} = return cond
 
-canonicalCond env (StringCond obj attr val) = do
-  obj'  <- internSymbol env obj
-  attr' <- internSymbol env attr
-  val'  <- internSymbol env val
-  return (PositiveCond obj' attr' val')
-
-canonicalCond env (SCond obj attr val) = do
-  obj'  <- sToSymbol env obj
-  attr' <- sToSymbol env attr
-  val'  <- sToSymbol env val
-  return (PositiveCond obj' attr' val')
-
-canonicalCond env (Neg c)  = liftM Neg (canonicalCond env c)
 canonicalCond env (Ncc cs) = liftM Ncc (mapM (canonicalCond env) cs)
+
+canonicalCond _ cond@PosCond {} = return cond
+
+canonicalCond env (PosStr obj attr val) =
+  liftM3 PosCond (internSymbol env obj)
+                 (internSymbol env attr)
+                 (internSymbol env val)
+
+canonicalCond env (PosS obj attr val) =
+  liftM3 PosCond (sToSymbol env obj)
+                 (sToSymbol env attr)
+                 (sToSymbol env val)
+
+canonicalCond _ cond@NegCond {} = return cond
+
+canonicalCond env (NegStr obj attr val) =
+  liftM3 NegCond (internSymbol env obj)
+                 (internSymbol env attr)
+                 (internSymbol env val)
+
+canonicalCond env (NegS obj attr val) =
+  liftM3 NegCond (sToSymbol env obj)
+                 (sToSymbol env attr)
+                 (sToSymbol env val)
+
+-- JOIN TESTS
+
+-- | Extracts and returns join tests for the given condition.
+-- joinTestsFromCondition :: Cond -> [Cond] -> [JoinTest]
+-- joinTestsFromCondition c earlierConds = undefined
+
+-- PROPAGATING CHANGES
 
 -- | Performs a propagation of changes on new nodes creation.
 updateNewNodeWithMatchesFromAbove :: Env -> Node -> STM ()

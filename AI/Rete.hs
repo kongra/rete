@@ -41,5 +41,5 @@ instance Neg Symbol where neg = NegCond
 ncc :: [Cond] -> Cond
 ncc []      = error "Ncc must have at least 2 subconditions, [] given."
 ncc [_]     = error "Ncc must have at least 2 subconditions, 1 given."
-ncc conds@_ = Ncc conds
+ncc conds@_ = NccCond conds
 {-# INLINABLE ncc #-}

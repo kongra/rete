@@ -161,10 +161,15 @@ isNegCond NegS    {} = True
 isNegCond _          = False
 {-# INLINE isNegCond #-}
 
+-- | Tells whether or not the Cond is a Ncc cond.
+isNccCond :: Cond -> Bool
+isNccCond NccCond {} = True
+isNccCond _          = False
+
 -- | Puts the Cond into it's canonical form.
 canonicalCond :: Env -> Cond -> STM Cond
 
-canonicalCond env (Ncc cs) = liftM Ncc (mapM (canonicalCond env) cs)
+canonicalCond env (NccCond cs) = liftM NccCond (mapM (canonicalCond env) cs)
 
 canonicalCond _ cond@PosCond {} = return cond
 canonicalCond _ cond@NegCond {} = return cond

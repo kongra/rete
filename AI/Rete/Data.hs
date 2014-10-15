@@ -364,7 +364,7 @@ data Cond =
   | NegCond !Symbol !Symbol !Symbol -- canonical form
 
   -- Nccs
-  | Ncc ![Cond]
+  | NccCond ![Cond]
 
 instance Show Cond where
   show (PosStr  o a v) = show o ++ " " ++ show a ++ " " ++ show v
@@ -375,4 +375,4 @@ instance Show Cond where
   show (NegS    o a v) = "¬ " ++ show o ++ " " ++ show a ++ " " ++ show v
   show (NegCond o a v) = "¬ " ++ show o ++ " " ++ show a ++ " " ++ show v
 
-  show (Ncc conds) = "¬ " ++ show conds
+  show (NccCond conds) = "¬ " ++ show conds

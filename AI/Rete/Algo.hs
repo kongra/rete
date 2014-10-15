@@ -26,7 +26,7 @@ import           Control.Exception (Exception)
 import           Control.Monad (when, unless, liftM, liftM2, forM_)
 
 import qualified Data.HashMap.Strict as Map
-import qualified Data.HashSet as Set
+import qualified Data.HashSet        as Set
 import           Data.Maybe (isJust, fromJust)
 import           Data.Typeable
 

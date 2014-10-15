@@ -21,7 +21,7 @@ module AI.Rete.Net where
 import           AI.Rete.Algo
 import           AI.Rete.Data
 import           Control.Concurrent.STM
-import           Control.Monad (forM_)
+import           Control.Monad (forM_, liftM)
 import qualified Data.HashMap.Strict as Map
 import qualified Data.HashSet        as Set
 
@@ -143,6 +143,25 @@ buildOrShareBmem env parent = do
       -- We're done.
       return node
 {-# INLINABLE buildOrShareBmem #-}
+
+-- Puts the Cond into it's canonical form.
+canonicalCond :: Env -> Cond -> STM Cond
+canonicalCond _ cond@PositiveCond {} = return cond
+
+canonicalCond env (StringCond obj attr val) = do
+  obj'  <- internSymbol env obj
+  attr' <- internSymbol env attr
+  val'  <- internSymbol env val
+  return (PositiveCond obj' attr' val')
+
+canonicalCond env (SCond obj attr val) = do
+  obj'  <- sToSymbol env obj
+  attr' <- sToSymbol env attr
+  val'  <- sToSymbol env val
+  return (PositiveCond obj' attr' val')
+
+canonicalCond env (Neg c)  = liftM Neg (canonicalCond env c)
+canonicalCond env (Ncc cs) = liftM Ncc (mapM (canonicalCond env) cs)
 
 -- | Performs a propagation of changes on new nodes creation.
 updateNewNodeWithMatchesFromAbove :: Env -> Node -> STM ()

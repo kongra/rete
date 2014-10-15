@@ -150,28 +150,25 @@ canonicalCond :: Env -> Cond -> STM Cond
 canonicalCond env (Ncc cs) = liftM Ncc (mapM (canonicalCond env) cs)
 
 canonicalCond _ cond@PosCond {} = return cond
-
-canonicalCond env (PosStr obj attr val) =
-  liftM3 PosCond (internSymbol env obj)
-                 (internSymbol env attr)
-                 (internSymbol env val)
-
-canonicalCond env (PosS obj attr val) =
-  liftM3 PosCond (sToSymbol env obj)
-                 (sToSymbol env attr)
-                 (sToSymbol env val)
-
 canonicalCond _ cond@NegCond {} = return cond
 
-canonicalCond env (NegStr obj attr val) =
-  liftM3 NegCond (internSymbol env obj)
-                 (internSymbol env attr)
-                 (internSymbol env val)
+canonicalCond env (PosStr obj attr val) =
+  cctrans env PosCond internSymbol obj attr val
+canonicalCond env (PosS obj attr val) =
+  cctrans env PosCond sToSymbol obj attr val
 
+canonicalCond env (NegStr obj attr val) =
+  cctrans env NegCond internSymbol obj attr val
 canonicalCond env (NegS obj attr val) =
-  liftM3 NegCond (sToSymbol env obj)
-                 (sToSymbol env attr)
-                 (sToSymbol env val)
+  cctrans env NegCond sToSymbol obj attr val
+
+cctrans :: Env
+           -> (Symbol -> Symbol -> Symbol -> Cond)
+           -> (Env -> a -> STM Symbol)
+           -> a -> a -> a
+           -> STM Cond
+cctrans env constr trans obj attr val =
+  liftM3 constr (trans env obj) (trans env attr) (trans env val)
 
 -- JOIN TESTS
 

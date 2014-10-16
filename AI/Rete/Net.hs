@@ -25,6 +25,7 @@ import           Control.Monad (forM_, liftM, liftM3)
 import qualified Data.HashMap.Strict as Map
 import qualified Data.HashSet as Set
 import           Data.Maybe (isJust, fromJust)
+import           Safe (headMay)
 
 -- | Tells whether or not the Symbols is a Variable.
 isVariable :: Symbol -> Bool
@@ -165,6 +166,7 @@ isNegCond _          = False
 isNccCond :: Cond -> Bool
 isNccCond NccCond {} = True
 isNccCond _          = False
+{-# INLINE isNccCond #-}
 
 -- | Puts the Cond into it's canonical form.
 canonicalCond :: Env -> Cond -> STM Cond
@@ -198,10 +200,13 @@ cctrans env constr trans obj attr val =
 
 -- | Extracts and returns join tests for the given condition.
 joinTestsFromCondition :: Cond -> [Cond] -> [JoinTest]
+
 joinTestsFromCondition (PosCond obj attr val) earlierConds =
   joinTestsFromConditionImpl obj attr val earlierConds
+
 joinTestsFromCondition (NegCond obj attr val) earlierConds =
   joinTestsFromConditionImpl obj attr val earlierConds
+
 joinTestsFromCondition cond@_ _ = error $
   "Join tests may be extracted only from PosCond or NegCond, given" ++
   show cond
@@ -214,7 +219,7 @@ joinTestsFromConditionImpl :: Symbol
                            -> [Cond]
                            -> [JoinTest]
 joinTestsFromConditionImpl obj attr val earlierConds =
-  let econds  = reverse earlierConds
+  let econds  = indexedPositiveEarlierConds earlierConds
       test1   = joinTestFromField Obj  obj  econds
       test2   = joinTestFromField Attr attr econds
       test3   = joinTestFromField Val  val  econds
@@ -225,17 +230,49 @@ joinTestsFromConditionImpl obj attr val earlierConds =
   in
    result3
 
-data IndexedCond  = IndexedCond  !Cond  !Int
+-- | Returns a field within the PosCond that exhibits equality with
+-- the variable.
+variableField :: Cond -> Symbol -> Maybe Field
+variableField (PosCond obj attr val) v
+  | obj  == v     = Just Obj
+  | attr == v     = Just Attr
+  | val  == v     = Just Val
+  | otherwise     = Nothing
+variableField _ _ = error "Only PosConds arguments are allowed."
+{-# INLINABLE variableField #-}
+
+type IndexedCond  = (Cond, Int)
 data IndexedField = IndexedField !Field !Int
 
--- | An utility that prepares earlier conds for the process of
--- extracting join tests.
--- prepareIndexedPositiveEarlierConds :: [Cond] -> [IndexedCond]
--- prepareIndexedPositiveEarlierConds earlierConds =
---   zip (reverse earlierConds) [1 ..]
+indexedPositiveEarlierConds :: [Cond] -> [IndexedCond]
+indexedPositiveEarlierConds earlierConds =
+  -- Deliberately indexing from 1 not from 0
+  filter positive (zip (reverse earlierConds) [1 ..])
+  where
+    positive (cond, _) = isPosCond cond
+{-# INLINE indexedPositiveEarlierConds #-}
 
-joinTestFromField :: Field -> Symbol -> [Cond] -> Maybe JoinTest
-joinTestFromField _ _ _ = undefined
+indexedField :: Symbol -> IndexedCond -> Maybe IndexedField
+indexedField v (cond, i) =
+  case variableField cond v of
+    Nothing    -> Nothing
+    Just field -> Just (IndexedField field i)
+{-# INLINABLE indexedField #-}
+
+joinTestFromField :: Field -> Symbol -> [IndexedCond] -> Maybe JoinTest
+joinTestFromField field v earlierConds
+  | isVariable v =
+      case headMay matches of
+        Nothing                 -> Nothing
+        Just (IndexedField f i) -> Just (JoinTest field f i)
+
+  -- Non-variables are not taken under the account.
+  | otherwise = Nothing
+  where
+    matches = (map fromJust .
+              filter isJust .
+              map (indexedField v)) earlierConds
+{-# INLINABLE joinTestFromField #-}
 
 -- PROPAGATING CHANGES
 

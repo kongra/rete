@@ -262,17 +262,38 @@ indexedField v (cond, i) =
 joinTestFromField :: Field -> Symbol -> [IndexedCond] -> Maybe JoinTest
 joinTestFromField field v earlierConds
   | isVariable v =
-      case headMay matches of
+      case headMay (matches earlierConds) of
         Nothing                 -> Nothing
         Just (IndexedField f i) -> Just (JoinTest field f i)
 
-  -- Non-variables are not taken under the account.
+  -- Non-variables do not produce any tests.
   | otherwise = Nothing
   where
-    matches = (map fromJust .
-              filter isJust .
-              map (indexedField v)) earlierConds
+    matches = map fromJust . filter isJust . map (indexedField v)
 {-# INLINABLE joinTestFromField #-}
+
+-- JOIN NODES
+
+findNearestAncestorWithSameAmem :: Node -> Amem -> Maybe Node
+findNearestAncestorWithSameAmem (DummyTopNode {})  _ = Nothing
+findNearestAncestorWithSameAmem node amem =
+  case nodeVariant node of
+    JoinNode {nodeAmem = a}
+      -> if amem == a
+         then Just node
+         else findNearestAncestorWithSameAmem parent amem
+
+    NegativeNode {nodeAmem = a}
+      -> if amem == a
+         then Just node
+         else findNearestAncestorWithSameAmem parent amem
+
+    NccNode {nccPartner = partner}
+      -> findNearestAncestorWithSameAmem (nodeParent partner) amem
+
+    _ -> findNearestAncestorWithSameAmem parent amem
+  where parent = nodeParent node
+
 
 -- PROPAGATING CHANGES
 

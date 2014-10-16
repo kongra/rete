@@ -179,6 +179,11 @@ data Amem =
   , amemVal  :: !Symbol
   }
 
+instance Eq Amem where
+  Amem {amemObj = obj1, amemAttr = attr1, amemVal = val1} ==
+    Amem {amemObj = obj2, amemAttr = attr2, amemVal = val2} =
+      obj1 == obj2 && attr1 == attr2 && val1 == val2
+
 -- | Node with Variants
 data Node =
   Node
@@ -253,13 +258,13 @@ data NodeVariant =
   , rightUnlinked :: !(TVar Bool)
   }
   |
-  NCCNode
+  NccNode
   {
     nodeTokens :: !(TSet Token)
   , nccPartner :: !Node  -- ^ with NCCPartner variant
   }
   |
-  NCCPartner
+  NccPartner
   {
     -- | A corresponding NCC node, must be a TVar because of the
     -- circular dependency. See nccPartner in NCCNode variant.

@@ -61,12 +61,12 @@ isJoinNode node = case nodeVariant node of
   _             -> False
 {-# INLINE isJoinNode #-}
 
--- | Returns True iff the node is an NCC partner.
-isNCCPartner :: Node -> Bool
-isNCCPartner node = case nodeVariant node of
-  (NCCPartner {}) -> True
+-- | Returns True iff the node is an Ncc partner.
+isNccPartner :: Node -> Bool
+isNccPartner node = case nodeVariant node of
+  (NccPartner {}) -> True
   _               -> False
-{-# INLINE isNCCPartner #-}
+{-# INLINE isNccPartner #-}
 
 -- ENVIRONMENT, GENERATING IDS
 
@@ -404,8 +404,8 @@ leftActivate env tok wme node = case nodeVariant node of
   Bmem         {} -> leftActivateBmem         env tok wme node
   JoinNode     {} -> leftActivateJoinNode     env tok wme node
   NegativeNode {} -> leftActivateNegativeNode env tok wme node
-  NCCNode      {} -> leftActivateNCCNode      env tok wme node
-  NCCPartner   {} -> leftActivateNCCPartner   env tok wme node
+  NccNode      {} -> leftActivateNccNode      env tok wme node
+  NccPartner   {} -> leftActivateNccPartner   env tok wme node
   PNode        {} -> leftActivatePNode        env tok wme node
   DTN          {} -> error "Can't happen, nobody activates Dummy Top Node."
 {-# INLINABLE leftActivate #-}
@@ -581,11 +581,11 @@ rightActivateNegativeNode env wme node  = do
         modifyTVar' (wmeNegJoinResults wme) (Set.insert jr)
 {-# INLINABLE rightActivateNegativeNode #-}
 
--- NCC NODES
+-- Ncc NODES
 
-leftActivateNCCNode ::
+leftActivateNccNode ::
   Env -> Token -> Maybe Wme -> Node -> STM ()
-leftActivateNCCNode env tok wme node = do
+leftActivateNccNode env tok wme node = do
   -- Build and store a new token.
   newTok <- makeAndInsertToken env tok wme node
   let partner = vprop nccPartner node
@@ -611,13 +611,13 @@ leftActivateNCCNode env tok wme node = do
   when (Set.null newTokNccResults) $
     -- no ncc results so inform children
     mapMM_ (leftActivate env newTok Nothing) (readTVar (nodeChildren node))
-{-# INLINABLE leftActivateNCCNode #-}
+{-# INLINABLE leftActivateNccNode #-}
 
--- NCC PARNTER NODES
+-- Ncc PARNTER NODES
 
-leftActivateNCCPartner ::
+leftActivateNccPartner ::
   Env -> Token -> Maybe Wme -> Node -> STM ()
-leftActivateNCCPartner env tok wme partner = do
+leftActivateNccPartner env tok wme partner = do
   nccNode   <- readTVar (vprop nccPartnerNccNode partner)
   newResult <- makeToken env tok wme partner
 
@@ -636,12 +636,12 @@ leftActivateNCCPartner env tok wme partner = do
       deleteDescendentsOfToken env owner'
 
     Nothing ->
-      -- We didn't find an appropriate owner token already in the NCC
+      -- We didn't find an appropriate owner token already in the Ncc
       -- node's memory, so we just stuff the result in our temporary
       -- buffer.
       modifyTVar' (vprop nccPartnerNewResultBuffer partner)
         (Set.insert newResult)
-{-# INLINABLE leftActivateNCCPartner #-}
+{-# INLINABLE leftActivateNccPartner #-}
 
 -- | Searches node.tokens for a tok such that tok.parent = ownersTok
 -- and tok.wme = ownersWme.
@@ -660,7 +660,7 @@ findNccOwner node ownersTok ownersWme = do
 -- (owners-t, owners-w) would represent the owner. To do this we start
 -- with the argument pair and walk up the right number of links to find
 -- the pair that emerged from the join node for the condition preceding
--- the NCC partner.
+-- the Ncc partner.
 -- [From the original Doorenbos thesis]
 findOwnersPair :: Int -> Maybe Token -> Maybe Wme -> (Maybe Token, Maybe Wme)
 findOwnersPair numberOfConjucts ownersTok ownersWme =
@@ -861,8 +861,8 @@ deleteTokenAndDescendents env removeFromParent removeFromWme tok = do
 
   let node = tokNode tok
 
-  -- If tok.node is not NCC partner ...
-  unless (isNCCPartner node) $
+  -- If tok.node is not Ncc partner ...
+  unless (isNccPartner node) $
     -- ... remove tok from tok.node.items.
     modifyTVar' (vprop nodeTokens node) (Set.delete tok)
 
@@ -895,7 +895,7 @@ deleteTokenAndDescendents env removeFromParent removeFromWme tok = do
         modifyTVar' (wmeNegJoinResults (negativeJoinResultWme jr))
           (Set.delete jr)
 
-    NCCNode {} ->
+    NccNode {} ->
       -- For result-tok in tok.ncc-results ...
       forMM_ (liftM Set.toList (readTVar (tokNccResults tok))) $
         \resultTok -> do
@@ -907,9 +907,9 @@ deleteTokenAndDescendents env removeFromParent removeFromWme tok = do
           modifyTVar' (tokChildren (tokParent resultTok))
             (Set.delete resultTok)
 
-    NCCPartner {} -> do
+    NccPartner {} -> do
       (Just owner) <- readTVar (tokOwner tok)
-      -- A token in NCC partner always has owner.
+      -- A token in Ncc partner always has owner.
 
       -- Remove tok from tok.owner.ncc-results
       nccResults <- readTVar (tokNccResults owner)

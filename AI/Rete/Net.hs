@@ -21,7 +21,7 @@ module AI.Rete.Net where
 import           AI.Rete.Algo
 import           AI.Rete.Data
 import           Control.Concurrent.STM
-import           Control.Monad (forM_, liftM, liftM3)
+import           Control.Monad (forM_, liftM, liftM3, unless)
 import qualified Data.HashMap.Strict as Map
 import qualified Data.HashSet as Set
 import           Data.Maybe (isJust, fromJust)
@@ -123,18 +123,12 @@ buildOrShareBmem env parent = do
   if not (null bmems)
     then return (head bmems)
     else do
-      -- Create new Bmem variant
+      -- Create new node with Bmem variant
       tokens      <- newTVar Set.empty
       allChildren <- newTVar Set.empty
-      let variant = Bmem { nodeTokens      = tokens
-                         , bmemAllChildren = allChildren }
-      -- Create new node
-      id'      <- genid env
-      children <- newTVar []
-      let node = Node { nodeId       = id'
-                      , nodeParent   = parent
-                      , nodeChildren = children
-                      , nodeVariant  = variant }
+      node <- newNode env parent
+              Bmem { nodeTokens      = tokens
+                   , bmemAllChildren = allChildren }
 
       -- Add node to parent's children
       writeTVar (nodeChildren parent) $! (node:parentChildren)
@@ -145,6 +139,18 @@ buildOrShareBmem env parent = do
       -- We're done.
       return node
 {-# INLINABLE buildOrShareBmem #-}
+
+-- | Creates and returns a new Node using the arguments. It DOES NOT
+-- add the created node to it's parent.children.
+newNode :: Env -> Node -> NodeVariant -> STM Node
+newNode env parent variant = do
+  id'      <- genid env
+  children <- newTVar []
+  return Node { nodeId       = id'
+              , nodeParent   = parent
+              , nodeChildren = children
+              , nodeVariant  = variant }
+{-# INLINE newNode #-}
 
 -- | Tells whether or not the Cond is a positive one.
 isPosCond :: Cond -> Bool
@@ -246,7 +252,8 @@ data IndexedField = IndexedField !Field !Int
 
 indexedPositiveEarlierConds :: [Cond] -> [IndexedCond]
 indexedPositiveEarlierConds earlierConds =
-  -- Deliberately indexing from 1 not from 0
+  -- Deliberately indexing from 1 not from 0. This is because of the way
+  -- the matching tokens are reached when performing joins.
   filter positive (zip (reverse earlierConds) [1 ..])
   where
     positive (cond, _) = isPosCond cond
@@ -293,7 +300,59 @@ findNearestAncestorWithSameAmem node amem =
 
     _ -> findNearestAncestorWithSameAmem parent amem
   where parent = nodeParent node
+{-# INLINABLE findNearestAncestorWithSameAmem #-}
 
+isShareableJoinNode :: Amem -> [JoinTest] -> Node -> Bool
+isShareableJoinNode amem tests node =
+  isJoinNode node
+  && amem  == vprop nodeAmem  node
+  && tests == vprop joinTests node
+{-# INLINE isShareableJoinNode #-}
+
+buildOrShareJoinNode :: Env -> Node -> Amem -> [JoinTest] -> STM Node
+buildOrShareJoinNode env parent amem tests = do
+  -- parent is always a β-memory, so below it's safe
+  allChildren <- readTVar (vprop bmemAllChildren parent)
+  let matchingOneOf = headMay
+                      . filter (isShareableJoinNode amem tests)
+                      . Set.toList
+  case matchingOneOf allChildren of
+    Just node -> return node
+    Nothing   -> do
+      -- Establish the unlinking stuff ...
+      unlinkRight <- nullTSet (vprop nodeTokens parent)
+      ru          <- newTVar unlinkRight
+      -- ... unlinking left only if the right ul. was not applied.
+      unlinkLeft'    <- nullTSet (amemWmes amem)
+      let unlinkLeft = not unlinkRight && unlinkLeft'
+      lu             <- newTVar unlinkLeft
+
+      -- Create new node with JoinNode variant
+      let ancestor = findNearestAncestorWithSameAmem parent amem
+      node <- newNode env parent
+              JoinNode { nodeAmem                    = amem
+                       , nearestAncestorWithSameAmem = ancestor
+                       , joinTests                   = tests
+                       , leftUnlinked                = lu
+                       , rightUnlinked               = ru }
+
+      -- Add node to parent.allChildren
+      writeTVar (vprop bmemAllChildren parent) $! Set.insert node allChildren
+
+      -- Increment amem.reference-count
+      modifyTVar' (amemReferenceCount amem) (+1)
+
+      -- Apply unlinking.
+      unless unlinkRight $
+        -- insert node at the head of amem.successors
+        modifyTVar' (amemSuccessors amem) (node:)
+
+      unless unlinkRight $
+        -- add node (to the head) of parent.children
+        modifyTVar' (nodeChildren parent) (node:)
+
+      return node
+{-# INLINABLE buildOrShareJoinNode #-}
 
 -- PROPAGATING CHANGES
 

@@ -151,7 +151,7 @@ instance Hashable Token where
   hashWithSalt salt (DummyTopToken {})    = salt `hashWithSalt` ((-1) :: ID)
 
 -- | Field
-data Field = Obj | Attr | Val deriving (Show)
+data Field = Obj | Attr | Val deriving (Show, Eq)
 
 -- | α Memory Index
 type WmesIndex = (Map.HashMap Symbol (Set.HashSet Wme))
@@ -212,6 +212,10 @@ instance Eq Node where
   Node {nodeId = id1} == Node {nodeId = id2} = id1 == id2
   DummyTopNode {}     == DummyTopNode {}     = True
   _ == _ = False
+
+instance Hashable Node where
+  hashWithSalt salt Node {nodeId = id'} = salt `hashWithSalt` id'
+  hashWithSalt salt DummyTopNode {}     = salt `hashWithSalt` (-1 :: ID)
 
 data NodeVariant =
   DTN
@@ -303,6 +307,7 @@ data JoinTest =
   , joinTestField2   :: !Field
   , joinTestDistance :: !Int
   }
+  deriving Eq
 
 -- | NegativeJoinResult
 data NegativeJoinResult =

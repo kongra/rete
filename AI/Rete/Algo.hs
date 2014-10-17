@@ -42,12 +42,28 @@ nullTSet :: TSet a -> STM Bool
 nullTSet = liftM Set.null . readTVar
 {-# INLINE nullTSet #-}
 
+-- | A monadic version of Set.toList
+setToListM :: Monad m => m (Set.HashSet a) -> m [a]
+setToListM = liftM Set.toList
+{-# INLINE setToListM #-}
+
+-- | A monadic (in STM monad) version of Set.toList.
+setToListT :: TSet a -> STM [a]
+setToListT = setToListM . readTVar
+{-# INLINE setToListT #-}
+
 -- VARIANTS
 
 -- | Accesses the variant property of the node.
 vprop :: (NodeVariant -> a) -> Node -> a
 vprop accessor = accessor . nodeVariant
 {-# INLINE vprop #-}
+
+-- | Accesses the transactional variant property of the node and reads
+-- it'c content.
+rvprop :: (NodeVariant -> TVar a) -> Node -> STM a
+rvprop accessor = readTVar . vprop accessor
+{-# INLINE rvprop #-}
 
 -- Variant type recognition could be implemented using TemplateHaskell
 -- and derive, but let's keep dependencies slim if possible. See:
@@ -88,13 +104,28 @@ createEnv = do
   vals    <- newTVar Map.empty
   amems   <- newTVar Map.empty
 
+  -- Initialize dummies
+  dummyNodeChildren    <- newTVar []
+  dummyNodeTokens      <- newTVar Set.empty
+  dummyNodeAllChildren <- newTVar Set.empty
+  dummyTokChildren     <- newTVar Set.empty
+
+  let dummyVariant = DTN           dummyNodeTokens   dummyNodeAllChildren
+      dummyNode    = DummyTopNode  dummyNodeChildren dummyVariant
+      dummyTok     = DummyTopToken dummyNode         dummyTokChildren
+
+  -- Make the dummy token the only member of dummyNode.tokens
+  modifyTVar' dummyNodeTokens (Set.insert dummyTok)
+
   return Env { envId              = id'
              , envSymbolsRegistry = symbols
              , envWmesRegistry    = wmes
              , envWmesByObj       = objs
              , envWmesByAttr      = attrs
              , envWmesByVal       = vals
-             , envAmems           = amems }
+             , envAmems           = amems
+             , envDummyTopNode    = dummyNode
+             , envDummyTopToken   = dummyTok }
 {-# INLINABLE createEnv #-}
 
 -- | Generates a new ID
@@ -459,12 +490,12 @@ fieldValue Val  = wmeVal
 -- | Matches a token to wmes in an α memory using the α memory indexes.
 matchingAmemWmes :: [JoinTest] -> Token -> Amem -> STM [Wme]
 -- When no tests specified, we simply take all wmes from the α memory
-matchingAmemWmes [] _ amem = liftM Set.toList (readTVar (amemWmes amem))
+matchingAmemWmes [] _ amem = setToListT (amemWmes amem)
 matchingAmemWmes tests tok amem = do
   -- When at least one test specified ...
   let wmes = tokenWmes tok
       (s:sets) = map (amemWmesForTest wmes amem) tests
-  liftM Set.toList (foldr (liftM2 Set.intersection) s sets)
+  setToListM (foldr (liftM2 Set.intersection) s sets)
 {-# INLINABLE matchingAmemWmes #-}
 
 -- | Uses proper indexes of the α memory to return a set of wmes
@@ -531,7 +562,7 @@ rightActivateJoinNode env wme node = do
   unless isParentEmpty $ do
     children <- readTVar (nodeChildren node)
     unless (null children) $ do
-      parentToks <- readTVar (vprop nodeTokens parent)
+      parentToks <- rvprop nodeTokens parent
       unless (Set.null parentToks) $ do
         let tests = vprop joinTests node
             wme'  = Just wme
@@ -573,7 +604,7 @@ leftActivateNegativeNode env tok wme node = do
 
 rightActivateNegativeNode :: Env -> Wme -> Node -> STM ()
 rightActivateNegativeNode env wme node  = do
-  toks <- readTVar (vprop nodeTokens node)
+  toks <- rvprop nodeTokens node
   unless (Set.null toks) $ do
     let tests = vprop joinTests node
     forM_ (Set.toList toks) $ \tok ->
@@ -597,7 +628,7 @@ leftActivateNccNode env tok wme node = do
   newTok <- makeAndInsertToken env tok wme node
   let partner = vprop nccPartner node
 
-  newResultBuffer <- readTVar (vprop nccPartnerNewResultBuffer partner)
+  newResultBuffer <- rvprop nccPartnerNewResultBuffer partner
 
   -- It is true that during the algorithm the assignment takes place:
   -- new-token.ncc-results ← node.partner.new-result-buffer,
@@ -625,7 +656,7 @@ leftActivateNccNode env tok wme node = do
 leftActivateNccPartner ::
   Env -> Token -> Maybe Wme -> Node -> STM ()
 leftActivateNccPartner env tok wme partner = do
-  nccNode   <- readTVar (vprop nccPartnerNccNode partner)
+  nccNode   <- rvprop nccPartnerNccNode partner
   newResult <- makeToken env tok wme partner
 
   -- Find appropriate owner token (into whose local memory we should
@@ -654,7 +685,7 @@ leftActivateNccPartner env tok wme partner = do
 -- and tok.wme = ownersWme.
 findNccOwner :: Node -> Maybe Token -> Maybe Wme -> STM (Maybe Token)
 findNccOwner node ownersTok ownersWme = do
-  tokens <- readTVar (vprop nodeTokens node)
+  tokens <- rvprop nodeTokens node
   return $ headMay (filter matchingTok (Set.toList tokens))
   where
     matchingTok tok = isJust    ownersTok &&
@@ -832,10 +863,10 @@ propagateWmeRemoval env wme = do
   -- Delete all tokens wme is in. Remove every tokent from it's parent
   -- token but avoid removing from wme.
   mapMM_ (deleteTokenAndDescendents env True False)
-    (liftM Set.toList (readTVar (wmeTokens wme)))
+    (setToListT (wmeTokens wme))
 
   -- For every jr in wme.negative-join-results
-  forMM_ (liftM Set.toList (readTVar (wmeNegJoinResults wme))) $ \jr -> do
+  forMM_ (setToListT (wmeNegJoinResults wme)) $ \jr -> do
     -- ... remove jr from jr.owner.negative-join-results
     let owner = negativeJoinResultOwner jr
     jresults <- readTVar (tokNegJoinResults owner)
@@ -897,15 +928,14 @@ deleteTokenAndDescendents env removeFromParent removeFromWme tok = do
         rightUnlink node (vprop nodeAmem node)
 
       -- For jr in tok.(neg)-join-results
-      forMM_ (liftM Set.toList (readTVar (tokNegJoinResults tok))) $ \jr ->
+      forMM_ (setToListT (tokNegJoinResults tok)) $ \jr ->
         -- remove jr from jr.wme.negative-join-results
         modifyTVar' (wmeNegJoinResults (negativeJoinResultWme jr))
           (Set.delete jr)
 
     NccNode {} ->
       -- For result-tok in tok.ncc-results ...
-      forMM_ (liftM Set.toList (readTVar (tokNccResults tok))) $
-        \resultTok -> do
+      forMM_ (setToListT (tokNccResults tok)) $ \resultTok -> do
           -- ... remove result-tok from result-tok.wme.tokens,
           modifyTVar' (wmeTokens (fromJust (tokWme resultTok)))
             (Set.delete resultTok)
@@ -925,7 +955,7 @@ deleteTokenAndDescendents env removeFromParent removeFromWme tok = do
 
       -- If tok.owner.ncc-results is nil
       when (Set.null updatedNccResults) $ do
-        nccNode <- readTVar (vprop nccPartnerNccNode node)
+        nccNode <- rvprop nccPartnerNccNode node
         -- For child in tok.node.ncc-node.children -> leftActivate
         mapMM_ (leftActivate env owner Nothing)
           (readTVar (nodeChildren nccNode))

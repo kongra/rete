@@ -67,6 +67,10 @@ data Env =
 
     -- | The registry of known α memories
   , envAmems :: !(TVar AmemsRegistry)
+
+    -- | Dummies
+  , envDummyTopNode  :: !Node
+  , envDummyTopToken :: !Token
   }
 
 -- | Working Memory Element (Wme)

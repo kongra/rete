@@ -25,7 +25,7 @@ import           Control.Monad (forM_, liftM, liftM3, unless)
 import qualified Data.HashMap.Strict as Map
 import qualified Data.HashSet as Set
 import           Data.Maybe (isJust, fromJust)
-import           Kask.Control.Monad (whenM)
+import           Kask.Control.Monad (whenM, forMM_)
 import           Safe (headMay)
 
 -- | Tells whether or not the Symbols is a Variable.
@@ -318,7 +318,7 @@ isShareableJoinNode amem tests node =
 buildOrShareJoinNode :: Env -> Node -> Amem -> [JoinTest] -> STM Node
 buildOrShareJoinNode env parent amem tests = do
   -- parent is always a β-memory, so below it's safe
-  allParentChildren <- readTVar (vprop bmemAllChildren parent)
+  allParentChildren <- rvprop bmemAllChildren parent
   let matchingOneOf = headMay
                       . filter (isShareableJoinNode amem tests)
                       . Set.toList
@@ -410,4 +410,17 @@ buildOrShareNegativeNode env parent amem tests = do
 
 -- | Performs a propagation of changes on new nodes creation.
 updateNewNodeWithMatchesFromAbove :: Env -> Node -> STM ()
-updateNewNodeWithMatchesFromAbove _ _ = undefined
+
+updateNewNodeWithMatchesFromAbove _ DummyTopNode {} =
+  error "Illegal attempt to update from above the DummyTopNode."
+
+updateNewNodeWithMatchesFromAbove env node@Node {nodeParent = parent} =
+  case nodeVariant parent of
+    Bmem {nodeTokens = toks} ->
+      forMM_ (setToListT toks) $ \tok ->
+        leftActivate env tok Nothing node
+
+    _ -> undefined
+
+
+-- updateNewNodeWithMatchesFromAbove env node = do

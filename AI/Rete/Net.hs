@@ -25,6 +25,7 @@ import           Control.Monad (forM_, liftM, liftM3, unless)
 import qualified Data.HashMap.Strict as Map
 import qualified Data.HashSet as Set
 import           Data.Maybe (isJust, fromJust)
+import           Kask.Control.Monad (whenM)
 import           Safe (headMay)
 
 -- | Tells whether or not the Symbols is a Variable.
@@ -106,6 +107,20 @@ activateAmemOnCreation env amem obj attr val = do
     modifyTVar' (amemWmesByVal  amem) (wmesIndexInsert (wmeVal  wme) wme)
 {-# INLINE activateAmemOnCreation #-}
 
+-- NODE CREATION (COMMON PART(S)
+
+-- | Creates and returns a new Node using the arguments. It DOES NOT
+-- add the created node to it's parent.children.
+newNode :: Env -> Node -> NodeVariant -> STM Node
+newNode env parent variant = do
+  id'      <- genid env
+  children <- newTVar []
+  return Node { nodeId       = id'
+              , nodeParent   = parent
+              , nodeChildren = children
+              , nodeVariant  = variant }
+{-# INLINE newNode #-}
+
 -- BETA MEMORY CREATION
 
 -- | Returns True iff the node is a Bmem node.
@@ -115,7 +130,7 @@ isBmem node = case nodeVariant node of
   _         -> False
 {-# INLINABLE isBmem #-}
 
--- | Creates a new beta memory or returns a shared one if possible.
+-- | Creates a new β memory or returns a shared one if possible.
 buildOrShareBmem :: Env -> Node -> STM Node
 buildOrShareBmem env parent = do
   parentChildren <- readTVar (nodeChildren parent)
@@ -140,18 +155,6 @@ buildOrShareBmem env parent = do
       return node
 {-# INLINABLE buildOrShareBmem #-}
 
--- | Creates and returns a new Node using the arguments. It DOES NOT
--- add the created node to it's parent.children.
-newNode :: Env -> Node -> NodeVariant -> STM Node
-newNode env parent variant = do
-  id'      <- genid env
-  children <- newTVar []
-  return Node { nodeId       = id'
-              , nodeParent   = parent
-              , nodeChildren = children
-              , nodeVariant  = variant }
-{-# INLINE newNode #-}
-
 -- | Tells whether or not the Cond is a positive one.
 isPosCond :: Cond -> Bool
 isPosCond PosCond {} = True
@@ -174,10 +177,12 @@ isNccCond NccCond {} = True
 isNccCond _          = False
 {-# INLINE isNccCond #-}
 
--- | Puts the Cond into it's canonical form.
+-- | Puts the Cond into it's canonical form. The canonical form is the
+-- one that uses solely Symbol and not Strings or Ses.
 canonicalCond :: Env -> Cond -> STM Cond
 
-canonicalCond env (NccCond cs) = liftM NccCond (mapM (canonicalCond env) cs)
+canonicalCond env (NccCond cs) =
+  liftM NccCond (mapM (canonicalCond env) cs)
 
 canonicalCond _ cond@PosCond {} = return cond
 canonicalCond _ cond@NegCond {} = return cond
@@ -298,6 +303,7 @@ findNearestAncestorWithSameAmem node amem =
     NccNode {nccPartner = partner}
       -> findNearestAncestorWithSameAmem (nodeParent partner) amem
 
+    -- For all others...
     _ -> findNearestAncestorWithSameAmem parent amem
   where parent = nodeParent node
 {-# INLINABLE findNearestAncestorWithSameAmem #-}
@@ -307,16 +313,16 @@ isShareableJoinNode amem tests node =
   isJoinNode node
   && amem  == vprop nodeAmem  node
   && tests == vprop joinTests node
-{-# INLINE isShareableJoinNode #-}
+{-# INLINABLE isShareableJoinNode #-}
 
 buildOrShareJoinNode :: Env -> Node -> Amem -> [JoinTest] -> STM Node
 buildOrShareJoinNode env parent amem tests = do
   -- parent is always a β-memory, so below it's safe
-  allChildren <- readTVar (vprop bmemAllChildren parent)
+  allParentChildren <- readTVar (vprop bmemAllChildren parent)
   let matchingOneOf = headMay
                       . filter (isShareableJoinNode amem tests)
                       . Set.toList
-  case matchingOneOf allChildren of
+  case matchingOneOf allParentChildren of
     Just node -> return node
     Nothing   -> do
       -- Establish the unlinking stuff ...
@@ -337,22 +343,68 @@ buildOrShareJoinNode env parent amem tests = do
                        , rightUnlinked               = ru }
 
       -- Add node to parent.allChildren
-      writeTVar (vprop bmemAllChildren parent) $! Set.insert node allChildren
+      writeTVar (vprop bmemAllChildren parent) $!
+        Set.insert node allParentChildren
 
       -- Increment amem.reference-count
       modifyTVar' (amemReferenceCount amem) (+1)
 
-      -- Apply unlinking.
       unless unlinkRight $
-        -- insert node at the head of amem.successors
+        -- Insert node at the head of amem.successors
         modifyTVar' (amemSuccessors amem) (node:)
 
-      unless unlinkRight $
-        -- add node (to the head) of parent.children
+      unless unlinkLeft $
+        -- Add node (to the head) of parent.children
         modifyTVar' (nodeChildren parent) (node:)
 
       return node
 {-# INLINABLE buildOrShareJoinNode #-}
+
+-- NEGATIVE NODES
+
+isShareableNegativeNode :: Amem -> [JoinTest] -> Node -> Bool
+isShareableNegativeNode amem tests node =
+  isNegativeNode node
+  && amem  == vprop nodeAmem  node
+  && tests == vprop joinTests node
+{-# INLINABLE isShareableNegativeNode #-}
+
+buildOrShareNegativeNode :: Env -> Node -> Amem -> [JoinTest] -> STM Node
+buildOrShareNegativeNode env parent amem tests = do
+  parentChildren <- readTVar (nodeChildren parent)
+  let matchingOneOf = headMay
+                      . filter (isShareableNegativeNode amem tests)
+  case matchingOneOf parentChildren of
+    Just node -> return node
+    Nothing   -> do
+      -- Create new node with JoinNode variant
+      let ancestor = findNearestAncestorWithSameAmem parent amem
+      toks <- newTVar Set.empty
+      ru   <- newTVar False
+      node <- newNode env parent
+              NegativeNode { nodeTokens                  = toks
+                           , nodeAmem                    = amem
+                           , nearestAncestorWithSameAmem = ancestor
+                           , joinTests                   = tests
+                           , rightUnlinked               = ru }
+
+      -- Insert node at the head of parent.children
+      writeTVar (nodeChildren parent) $! node:parentChildren
+
+      -- Insert node at the head of amem.successors
+      modifyTVar' (amemSuccessors amem) (node:)
+
+      -- Increment amem.reference-count
+      modifyTVar' (amemReferenceCount amem) (+1)
+
+      updateNewNodeWithMatchesFromAbove env node
+
+      -- Right unlink, but only after updating from above.
+      whenM (nullTSet (vprop nodeTokens node)) $
+        rightUnlink node amem
+
+      return node
+{-# INLINABLE buildOrShareNegativeNode #-}
 
 -- PROPAGATING CHANGES
 

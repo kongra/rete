@@ -61,6 +61,13 @@ isJoinNode node = case nodeVariant node of
   _             -> False
 {-# INLINE isJoinNode #-}
 
+-- | Returns True iff the node is a NegativeNode.
+isNegativeNode :: Node -> Bool
+isNegativeNode node = case nodeVariant node of
+  (NegativeNode {}) -> True
+  _                 -> False
+{-# INLINE isNegativeNode #-}
+
 -- | Returns True iff the node is an Ncc partner.
 isNccPartner :: Node -> Bool
 isNccPartner node = case nodeVariant node of

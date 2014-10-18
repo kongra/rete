@@ -416,11 +416,27 @@ updateNewNodeWithMatchesFromAbove _ DummyTopNode {} =
 
 updateNewNodeWithMatchesFromAbove env node@Node {nodeParent = parent} =
   case nodeVariant parent of
-    Bmem {nodeTokens = toks} ->
-      forMM_ (setToListT toks) $ \tok ->
-        leftActivate env tok Nothing node
+    Bmem {nodeTokens = toks} -> forMM_ (setToListT toks) $ \tok ->
+      leftActivate env tok Nothing node
 
-    _ -> undefined
+    DTN {} -> leftActivate env (envDummyTopToken env) Nothing node
 
+    JoinNode {} -> do
+      savedChildren <- readTVar (nodeChildren parent)
+      writeTVar (nodeChildren parent) [node]
+      forMM_ (setToListT (amemWmes (vprop nodeAmem parent))) $ \wme ->
+        rightActivate env wme parent
+      writeTVar (nodeChildren parent) savedChildren
 
--- updateNewNodeWithMatchesFromAbove env node = do
+    NegativeNode {} ->
+      forMM_ (setToListT (vprop nodeTokens parent)) $ \tok ->
+        whenM (nullTSet (tokNegJoinResults tok)) $
+          leftActivate env tok Nothing node
+
+    NccNode {} ->
+      forMM_ (setToListT (vprop nodeTokens parent)) $ \tok ->
+        whenM (nullTSet (tokNccResults tok)) $
+          leftActivate env tok Nothing node
+
+    _ -> error "Illegal parent when updateNewNodeWithMatchesFromAbove!"
+{-# INLINABLE updateNewNodeWithMatchesFromAbove #-}

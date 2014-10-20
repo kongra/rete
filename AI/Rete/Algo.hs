@@ -84,7 +84,14 @@ isNegativeNode node = case nodeVariant node of
   _                 -> False
 {-# INLINE isNegativeNode #-}
 
--- | Returns True iff the node is an Ncc partner.
+-- | Returns True iff the node is a Ncc node.
+isNccNode :: Node -> Bool
+isNccNode node = case nodeVariant node of
+  (NccNode {}) -> True
+  _            -> False
+{-# INLINE isNccNode #-}
+
+-- | Returns True iff the node is a Ncc partner.
 isNccPartner :: Node -> Bool
 isNccPartner node = case nodeVariant node of
   (NccPartner {}) -> True
@@ -665,7 +672,7 @@ leftActivateNccPartner env tok wme partner = do
                                (vprop nccPartnerNumberOfConjucts partner)
                                (Just tok)
                                wme
-  owner <- findNccOwner nccNode ownersTok ownersWme
+  owner <- findNccOwner (fromJust nccNode) ownersTok ownersWme
   case owner of
     Just owner' -> do
       -- Add newResult to owner's local memory and propagate further.
@@ -958,7 +965,7 @@ deleteTokenAndDescendents env removeFromParent removeFromWme tok = do
         nccNode <- rvprop nccPartnerNccNode node
         -- For child in tok.node.ncc-node.children -> leftActivate
         mapMM_ (leftActivate env owner Nothing)
-          (readTVar (nodeChildren nccNode))
+          (readTVar (nodeChildren (fromJust nccNode)))
 
     PNode {} ->
       -- For production nodes the only specific behavior is firing a

@@ -406,6 +406,72 @@ buildOrShareNegativeNode env parent amem tests = do
       return node
 {-# INLINABLE buildOrShareNegativeNode #-}
 
+-- NCC NODES CREATION
+
+isShareableNccNode :: Node -> Node -> Bool
+isShareableNccNode bottomOfSubnetwork node =
+  isNccNode node
+  && nodeParent (vprop nccPartner node) == bottomOfSubnetwork
+{-# INLINABLE isShareableNccNode #-}
+
+buildOrShareNccNodes :: Env
+                     -> Node      -- ^ parent
+                     -> Cond      -- ^ the NccCond
+                     -> [Cond]    -- ^ earlier conds
+                     -> STM Node  -- ^ the Ncc node
+buildOrShareNccNodes env parent (NccCond subconds) earlierConds = do
+  bottomOfSubnetwork <- buildOrShareNetworkForConditions
+                          env parent subconds earlierConds
+  parentChildren     <- readTVar (nodeChildren parent)
+  let matchingOneOf = headMay
+                      . filter (isShareableNccNode bottomOfSubnetwork)
+  case matchingOneOf parentChildren of
+    Just node -> return node
+    Nothing   -> do
+      newResultBuff <- newTVar Set.empty
+      nccNode <- newTVar Nothing
+      partner <- newNode env bottomOfSubnetwork
+                 NccPartner { nccPartnerNccNode          = nccNode
+                            , nccPartnerNumberOfConjucts = length subconds
+                            , nccPartnerNewResultBuffer  = newResultBuff }
+
+      toks <- newTVar Set.empty
+      new  <- newNode env parent
+              NccNode { nodeTokens = toks
+                      , nccPartner = partner }
+
+      -- Bind new to the partner.
+      writeTVar (vprop nccPartnerNccNode partner) $! Just new
+
+      -- Insert new at the tail of parent.children (so that the
+      -- subnetwork comes first).
+      writeTVar (nodeChildren parent) $! parentChildren ++ [new]
+
+        -- Insert partner at the head of bottomOfSubnetwork.children.
+      modifyTVar' (nodeChildren bottomOfSubnetwork) (partner:)
+
+      -- Note: we have to inform NCC node of existing matches before
+      -- informing the partner, otherwise lots of matches would all
+      -- get mixed together in the new-result-buffer.
+      updateNewNodeWithMatchesFromAbove env new
+      updateNewNodeWithMatchesFromAbove env partner
+
+      return new
+
+buildOrShareNccNodes _ _ _ _ =
+  error "Illegal cond - only NccConds accepted."
+{-# INLINABLE buildOrShareNccNodes #-}
+
+-- BUILDING THE NETWORK
+
+buildOrShareNetworkForConditions :: Env
+                                 -> Node      -- ^ parent
+                                 -> [Cond]    -- ^ conds
+                                 -> [Cond]    -- ^ earlier conds
+                                 -> STM Node  -- ^ the resulting node
+buildOrShareNetworkForConditions _ _ _ _ = undefined
+{-# INLINABLE buildOrShareNetworkForConditions #-}
+
 -- PROPAGATING CHANGES
 
 -- | Performs a propagation of changes on new nodes creation.
@@ -414,7 +480,8 @@ updateNewNodeWithMatchesFromAbove :: Env -> Node -> STM ()
 updateNewNodeWithMatchesFromAbove _ DummyTopNode {} =
   error "Illegal attempt to update from above the DummyTopNode."
 
-updateNewNodeWithMatchesFromAbove env node@Node {nodeParent = parent} =
+updateNewNodeWithMatchesFromAbove env node = do
+  let parent = nodeParent node
   case nodeVariant parent of
     Bmem {nodeTokens = toks} -> forMM_ (setToListT toks) $ \tok ->
       leftActivate env tok Nothing node

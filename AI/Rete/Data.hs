@@ -276,7 +276,7 @@ data NodeVariant =
   {
     -- | A corresponding NCC node, must be a TVar because of the
     -- circular dependency. See nccPartner in NCCNode variant.
-    nccPartnerNccNode :: !(TVar Node)
+    nccPartnerNccNode :: !(TVar (Maybe Node))
 
   , nccPartnerNumberOfConjucts :: !Int
 

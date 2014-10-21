@@ -326,13 +326,13 @@ instance Hashable NegativeJoinResult where
   hashWithSalt salt (NegativeJoinResult owner wme) =
     salt `hashWithSalt` owner `hashWithSalt` wme
 
--- | TokenLocation describes the binding for a variable within a token.
-data TokenLocation = TokenLocation
+-- | SymbolLocation describes the binding for a variable within a token.
+data SymbolLocation = SymbolLocation
                      !Field               -- ^ the field w in Wme
                      !Int  -- ^ distance within the token
 
 -- | A map of variable bindings for productions
-type VariableBindings = Map.HashMap Symbol TokenLocation
+type VariableBindings = Map.HashMap Symbol SymbolLocation
 
 -- | Actions
 type Action = Env        -- ^ Environment

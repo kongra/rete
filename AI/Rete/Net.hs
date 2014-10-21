@@ -252,7 +252,7 @@ joinTestsFromConditionImpl :: Symbol
                            -> [Cond]
                            -> [JoinTest]
 joinTestsFromConditionImpl obj attr val earlierConds =
-  let econds  = indexedPositiveEarlierConds earlierConds
+  let econds  = indexedPositiveConds earlierConds
       test1   = joinTestFromField Obj  obj  econds
       test2   = joinTestFromField Attr attr econds
       test3   = joinTestFromField Val  val  econds
@@ -277,14 +277,12 @@ variableField _ _ = error "Only PosConds arguments are allowed."
 type IndexedCond  = (Cond, Int)
 data IndexedField = IndexedField !Field !Int
 
-indexedPositiveEarlierConds :: [Cond] -> [IndexedCond]
-indexedPositiveEarlierConds earlierConds =
-  -- Deliberately indexing from 1 not from 0. This is because of the way
-  -- the matching tokens are reached when performing joins.
-  filter positive (zip (reverse earlierConds) [1 ..])
+indexedPositiveConds :: [Cond] -> [IndexedCond]
+indexedPositiveConds conds =
+  filter positive (zip (reverse conds) [0 ..])
   where
     positive (cond, _) = isPosCond cond
-{-# INLINE indexedPositiveEarlierConds #-}
+{-# INLINE indexedPositiveConds #-}
 
 indexedField :: Symbol -> IndexedCond -> Maybe IndexedField
 indexedField v (cond, i) =
@@ -298,7 +296,9 @@ joinTestFromField field v earlierConds
   | isVariable v =
       case headMay (matches earlierConds) of
         Nothing                 -> Nothing
-        Just (IndexedField f i) -> Just (JoinTest field f i)
+        -- Indices are 0-based. When creating a JoinTest we must
+        -- increase it to maintain a required 1-based indexing.
+        Just (IndexedField f i) -> Just (JoinTest field f (i+1))
 
   -- Non-variables do not produce any tests.
   | otherwise = Nothing
@@ -561,3 +561,43 @@ updateNewNodeWithMatchesFromAbove env node = do
 
     _ -> error "Illegal parent when updateNewNodeWithMatchesFromAbove!"
 {-# INLINABLE updateNewNodeWithMatchesFromAbove #-}
+
+-- ADDING PRODUCTIONS: TODO
+
+variableBindingsForConds :: [Cond] -> VariableBindings
+variableBindingsForConds conds = loop Map.empty posConds
+  where
+    posConds = indexedPositiveConds conds
+    loop result []                                 = result
+    loop result ((PosCond obj attr val, i) : cs) =
+      loop result3 cs
+      where
+        result1 = variableBindingsForCond obj  Obj  i result
+        result2 = variableBindingsForCond attr Attr i result1
+        result3 = variableBindingsForCond val  Val  i result2
+    loop _ _ = error "Only PosConds allowed here."
+{-# INLINE variableBindingsForConds #-}
+
+variableBindingsForCond :: Symbol
+                        -> Field
+                        -> Int               -- ^ distance
+                        -> VariableBindings  -- ^ bindings so far
+                        -> VariableBindings  -- ^ updated bindings
+variableBindingsForCond s f dist bindings =
+  case s of
+    -- For normal symbols leave bindings untouched
+    Symbol   {} -> bindings
+    -- For variables avoid overriding existing bindings
+    Variable {} -> if Map.member s bindings then bindings
+                   else Map.insert s (SymbolLocation f dist) bindings
+{-# INLINE variableBindingsForCond #-}
+
+-- ACCESSING INFORMATION IN ACTIONS: TODO
+
+-- DELETING NODES: TODO
+
+deleteNodeAndAnyUnusedAncestor :: Node -> STM ()
+deleteNodeAndAnyUnusedAncestor _ =
+  undefined
+
+-- REMOVING PRODUCTIONS: TODO

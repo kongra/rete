@@ -592,7 +592,18 @@ variableBindingsForCond s f dist bindings =
                    else Map.insert s (SymbolLocation f dist) bindings
 {-# INLINE variableBindingsForCond #-}
 
--- ACCESSING INFORMATION IN ACTIONS: TODO
+-- ACCESSING INFORMATION IN ACTIONS:
+
+-- | Returns the value of a variable inside an action or Nothing if
+-- the symbol was not recognized (no such variable, not a variable
+-- symbol).
+valA :: Actx -> Symbol -> Maybe Symbol
+valA Actx {actxNode = node, actxWmes = wmes} s =
+  case Map.lookup s (vprop pnodeVariableBindings node) of
+    Nothing                      -> Nothing
+    Just (SymbolLocation f dist) ->
+      Just (fieldValue f (fromJust (wmes !! dist)))
+{-# INLINABLE valA #-}
 
 -- DELETING NODES: TODO
 

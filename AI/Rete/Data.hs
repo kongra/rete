@@ -341,7 +341,7 @@ data Actx =
     actxEnv  :: !Env         -- ^ Current Env
   , actxNode :: !Node        -- ^ Production node
   , actxTok  :: !Token       -- ^ The matching token
-  , actxWmes :: [Maybe Wme]  -- ^ The token Wmes (reversed)
+  , actxWmes :: [Maybe Wme]  -- ^ The token Wmes
   }
 
 -- | Action of a production
@@ -388,9 +388,9 @@ data Cond =
   | NccCond ![Cond]
 
 instance Show Cond where
-  show (PosStr  o a v) = show o ++ " " ++ show a ++ " " ++ show v
-  show (PosS    o a v) = show o ++ " " ++ show a ++ " " ++ show v
-  show (PosCond o a v) = show o ++ " " ++ show a ++ " " ++ show v
+  show (PosStr  o a v) =         show o ++ " " ++ show a ++ " " ++ show v
+  show (PosS    o a v) =         show o ++ " " ++ show a ++ " " ++ show v
+  show (PosCond o a v) =         show o ++ " " ++ show a ++ " " ++ show v
 
   show (NegStr  o a v) = "¬ " ++ show o ++ " " ++ show a ++ " " ++ show v
   show (NegS    o a v) = "¬ " ++ show o ++ " " ++ show a ++ " " ++ show v

@@ -334,6 +334,7 @@ data SymbolLocation = SymbolLocation
 -- | A map of variable bindings for productions
 type VariableBindings = Map.HashMap Symbol SymbolLocation
 
+-- | The action context
 data Actx =
   Actx
   {
@@ -343,7 +344,7 @@ data Actx =
   , actxWmes :: [Maybe Wme]  -- ^ The token Wmes (reversed)
   }
 
--- | Actions
+-- | Action of a production
 type Action = Actx -> STM ()
 
 -- | The Working Memory key

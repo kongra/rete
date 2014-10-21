@@ -343,6 +343,11 @@ instance AddWme Symbol where
         feedAmems env wme obj attr val
         return (Just wme)
 
+-- | Works like addWme inside an action (of a production).
+addWmeA :: AddWme a => Actx -> a -> a -> a -> STM (Maybe Wme)
+addWmeA actx = addWme (actxEnv actx)
+{-# INLINE addWmeA #-}
+
 -- | Creates an empty Wme
 createWme :: Env -> Symbol -> Symbol -> Symbol -> STM Wme
 createWme env obj attr val = do
@@ -794,7 +799,7 @@ leftUnlink node parent = do
 -- REMOVING WMES
 
 class RemoveWme a where
-  -- Removes the fact described by 3 symbols. Returns the removed wme
+  -- | Removes the fact described by 3 symbols. Returns the removed wme
   -- or Nothing if the wme was not present in the working memory.
   removeWme :: Env -> a -> a -> a -> STM (Maybe Wme)
 
@@ -842,6 +847,11 @@ instance RemoveWme Symbol where
         -- ... and propagate down the network.
         propagateWmeRemoval env wme
         return wmeLookup
+
+-- | Works like removeWme inside an action (of a production).
+removeWmeA :: RemoveWme a => Actx -> a -> a -> a -> STM (Maybe Wme)
+removeWmeA actx = removeWme (actxEnv actx)
+{-# INLINE removeWmeA #-}
 
 -- | Propagates the wme removal down the Rete network. It is the
 -- actual implementation of original remove-wme procedure from the

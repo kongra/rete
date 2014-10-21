@@ -334,11 +334,17 @@ data SymbolLocation = SymbolLocation
 -- | A map of variable bindings for productions
 type VariableBindings = Map.HashMap Symbol SymbolLocation
 
+data Actx =
+  Actx
+  {
+    actxEnv  :: !Env         -- ^ Current Env
+  , actxNode :: !Node        -- ^ Production node
+  , actxTok  :: !Token       -- ^ The matching token
+  , actxWmes :: [Maybe Wme]  -- ^ The token Wmes (reversed)
+  }
+
 -- | Actions
-type Action = Env        -- ^ Environment
-              -> Node    -- ^ the one having PNode variant
-              -> Token   -- ^ The matching token
-              -> STM ()
+type Action = Actx -> STM ()
 
 -- | The Working Memory key
 data WmeKey = WmeKey

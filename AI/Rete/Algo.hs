@@ -727,7 +727,7 @@ leftActivatePNode env tok wme node  = do
 
   -- Fire the proper action.
   let action = vprop pnodeAction node
-  action env node newTok
+  action (Actx env node newTok (reverse (tokenWmes newTok)))
 {-# INLINABLE leftActivatePNode #-}
 
 -- LINKING/UNLINKING
@@ -972,7 +972,7 @@ deleteTokenAndDescendents env removeFromParent removeFromWme tok = do
       -- proper action.
       case vprop pnodeRevokeAction node of
         Nothing     -> return ()
-        Just action -> action env node tok
+        Just action -> action (Actx env node tok (reverse (tokenWmes tok)))
 
     DTN      {} -> error "Deleting token(s) from Dummy Top Node is evil."
     JoinNode {} -> error "Can't happen."

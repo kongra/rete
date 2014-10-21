@@ -564,11 +564,11 @@ updateNewNodeWithMatchesFromAbove env node = do
 
 -- ADDING PRODUCTIONS: TODO
 
+-- | Configures variable bindings for the conditions of a production.
 variableBindingsForConds :: [Cond] -> VariableBindings
-variableBindingsForConds conds = loop Map.empty posConds
+variableBindingsForConds conds = loop Map.empty (indexedPositiveConds conds)
   where
-    posConds = indexedPositiveConds conds
-    loop result []                                 = result
+    loop result []                               = result
     loop result ((PosCond obj attr val, i) : cs) =
       loop result3 cs
       where

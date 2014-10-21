@@ -24,6 +24,7 @@ import           Control.Concurrent.STM
 import           Control.Monad (forM_, liftM, liftM3, unless)
 import qualified Data.HashMap.Strict as Map
 import qualified Data.HashSet as Set
+import           Data.List (sortBy)
 import           Data.Maybe (isJust, fromJust)
 import           Kask.Control.Monad (whenM, forMM_)
 import           Safe (headMay)
@@ -206,6 +207,27 @@ cctrans :: Env
 cctrans env constr trans obj attr val =
   liftM3 constr (trans env obj) (trans env attr) (trans env val)
 {-# INLINE cctrans #-}
+
+-- | It is desirable for the Conds of a production to be sorted in
+-- such a way that the positive conds come before the negative and the
+-- ncc conds. Also the subconditins of a ncc should be sorted in such
+-- way. The following procedure does the job.
+sortConds :: [Cond] -> [Cond]
+sortConds = map processCond . sortBy (flip condsOrdering)
+  where
+    processCond c = case c of
+      (NccCond subconds) -> NccCond (sortConds subconds)
+      _                  -> c
+{-# INLINE sortConds #-}
+
+condsOrdering :: Cond -> Cond -> Ordering
+condsOrdering cond1 cond2
+  | isPosCond cond1 = if isPosCond cond2 then EQ else GT
+  | isNccCond cond1 = if isNccCond cond2 then EQ else LT
+  -- and for the NegativeCond ...
+  | otherwise       = if isPosCond cond2 then LT else
+                      if isNccCond cond2 then GT else EQ
+{-# INLINABLE condsOrdering #-}
 
 -- JOIN TESTS
 
@@ -469,7 +491,39 @@ buildOrShareNetworkForConditions :: Env
                                  -> [Cond]    -- ^ conds
                                  -> [Cond]    -- ^ earlier conds
                                  -> STM Node  -- ^ the resulting node
-buildOrShareNetworkForConditions _ _ _ _ = undefined
+
+-- When no conds, simply return parent
+buildOrShareNetworkForConditions _ parent [] _ = return parent
+
+buildOrShareNetworkForConditions env parent (c:cs) earlierConds = do
+  let updatedEarlierConds = earlierConds ++ [c]
+  case c of
+    (PosCond obj attr val) -> do
+      currentParent <- if parent == envDummyTopNode env
+                       -- No need to build a β-memory before building
+                       -- the first JoinNode, because DummyTopNode is
+                       -- β-memory like.
+                       then return parent
+                       else buildOrShareBmem env parent
+      let tests   =  joinTestsFromCondition c earlierConds
+      amem        <- buildOrShareAmem env obj attr val
+      currentNode <- buildOrShareJoinNode env currentParent amem tests
+      buildOrShareNetworkForConditions env currentNode
+        cs updatedEarlierConds
+
+    (NegCond obj attr val) -> do
+      let tests   =  joinTestsFromCondition c earlierConds
+      amem        <- buildOrShareAmem env obj attr val
+      currentNode <- buildOrShareNegativeNode env parent amem tests
+      buildOrShareNetworkForConditions env currentNode
+        cs updatedEarlierConds
+
+    NccCond {} -> do
+      currentNode <- buildOrShareNccNodes env parent c earlierConds
+      buildOrShareNetworkForConditions env currentNode
+        cs updatedEarlierConds
+
+    _ -> error ("Illegal c(ond) " ++ show c)
 {-# INLINABLE buildOrShareNetworkForConditions #-}
 
 -- PROPAGATING CHANGES

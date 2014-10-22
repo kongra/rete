@@ -592,7 +592,7 @@ variableBindingsForCond s f dist bindings =
                    else Map.insert s (SymbolLocation f dist) bindings
 {-# INLINE variableBindingsForCond #-}
 
--- ACCESSING INFORMATION IN ACTIONS:
+-- ACCESSING INFORMATION IN ACTIONS
 
 -- | Returns the value of a variable inside an action or Nothing if
 -- the symbol was not recognized (no such variable, not a variable

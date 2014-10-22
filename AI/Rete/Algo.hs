@@ -135,6 +135,9 @@ createEnv = do
              , envDummyTopToken   = dummyTok }
 {-# INLINABLE createEnv #-}
 
+data IDOverflow = IDOverflow deriving (Show, Typeable)
+instance Exception IDOverflow
+
 -- | Generates a new ID
 genid :: Env -> STM ID
 genid Env {envId = eid} = do
@@ -148,8 +151,18 @@ genid Env {envId = eid} = do
   return new
 {-# INLINABLE genid #-}
 
-data IDOverflow = IDOverflow deriving (Show, Typeable)
-instance Exception IDOverflow
+-- | Generates a new string with a unique name. The result is prefix#
+-- where # is some unique number.
+genstr :: String -> Env -> STM String
+genstr prefix env = do
+  id' <- genid env
+  return (prefix ++ show id')
+{-# INLINE genstr #-}
+
+-- | The default unique string generator that uses "G__" prefix
+genstrD :: Env -> STM String
+genstrD = genstr "G__"
+{-# INLINE genstrD #-}
 
 type WmesIndexOperator = Symbol -> Wme -> WmesIndex -> WmesIndex
 

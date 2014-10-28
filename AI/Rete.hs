@@ -24,15 +24,24 @@ module AI.Rete
 
 import AI.Rete.Data
 
--- | C is a typeclass that represents creation of positive conditions
--- with various types of arguments.
-class C a where c :: a -> a -> a -> Cond
+class C a where
+  -- | Creates a positive condition.
+  c :: a  -- ^ Obj
+    -> a  -- ^ Attr
+    -> a  -- ^ Val
+    -> Cond
 
 instance C String where c = PosStr
 instance C S      where c = PosS
 instance C Symbol where c = PosCond
 
-class Neg a where neg :: a -> a -> a -> Cond
+class Neg a where
+  -- | Creates a negative condition.
+  neg :: a  -- ^ Obj
+      -> a  -- ^ Attr
+      -> a  -- ^ Val
+      -> Cond
+
 instance Neg String where neg = NegStr
 instance Neg S      where neg = NegS
 instance Neg Symbol where neg = NegCond

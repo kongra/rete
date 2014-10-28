@@ -26,7 +26,7 @@ import           Control.Exception (Exception)
 import           Control.Monad (when, unless, liftM, liftM2, forM_)
 
 import qualified Data.HashMap.Strict as Map
-import qualified Data.HashSet        as Set
+import qualified Data.HashSet as Set
 import           Data.Maybe (isJust, fromJust)
 import           Data.Typeable
 
@@ -518,7 +518,7 @@ matchingAmemWmes :: [JoinTest] -> Token -> Amem -> STM [Wme]
 matchingAmemWmes [] _ amem = setToListT (amemWmes amem)
 matchingAmemWmes tests tok amem = do
   -- When at least one test specified ...
-  let wmes = tokenWmes tok
+  let wmes     = tokenWmes tok
       (s:sets) = map (amemWmesForTest wmes amem) tests
   setToListM (foldr (liftM2 Set.intersection) s sets)
 {-# INLINABLE matchingAmemWmes #-}
@@ -532,7 +532,7 @@ amemWmesForTest wmes amem test = do
   return (Map.lookupDefault Set.empty value index)
   where
     Just wme = wmes !! joinTestDistance test
-    value = fieldValue (joinTestField2 test) wme
+    value    = fieldValue (joinTestField2 test) wme
 
     amemIndexForField Obj  = readTVar . amemWmesByObj
     amemIndexForField Attr = readTVar . amemWmesByAttr

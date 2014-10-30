@@ -22,6 +22,7 @@ import           AI.Rete.Algo
 import           AI.Rete.Data
 import           Control.Concurrent.STM
 import           Control.Monad (forM_, liftM, liftM3, unless)
+import           Data.Foldable (toList)
 import qualified Data.HashMap.Strict as Map
 import qualified Data.HashSet as Set
 import           Data.List (sortBy)
@@ -116,7 +117,7 @@ activateAmemOnCreation env amem obj attr val = do
 newNode :: Env -> Node -> NodeVariant -> STM Node
 newNode env parent variant = do
   id'      <- genid env
-  children <- newTVar []
+  children <- newTVar Seq.empty
   return Node { nodeId       = id'
               , nodeParent   = parent
               , nodeChildren = children
@@ -136,7 +137,7 @@ isBmem node = case nodeVariant node of
 buildOrShareBmem :: Env -> Node -> STM Node
 buildOrShareBmem env parent = do
   parentChildren <- readTVar (nodeChildren parent)
-  let bmems = filter isBmem parentChildren
+  let bmems = filter isBmem (toList parentChildren)
   if not (null bmems)
     then return (head bmems)
     else do
@@ -148,7 +149,7 @@ buildOrShareBmem env parent = do
                    , bmemAllChildren = allChildren }
 
       -- Add node to parent's children
-      writeTVar (nodeChildren parent) $! (node:parentChildren)
+      writeTVar (nodeChildren parent) $! (node Seq.<| parentChildren)
 
       -- Update with matches from above.
       updateNewNodeWithMatchesFromAbove env node
@@ -378,7 +379,7 @@ buildOrShareJoinNode env parent amem tests = do
 
       unless unlinkLeft $
         -- Add node (to the head) of parent.children
-        modifyTVar' (nodeChildren parent) (node:)
+        modifyTVar' (nodeChildren parent) (node Seq.<|)
 
       return node
 {-# INLINABLE buildOrShareJoinNode #-}
@@ -397,6 +398,7 @@ buildOrShareNegativeNode env parent amem tests = do
   parentChildren <- readTVar (nodeChildren parent)
   let matchingOneOf = headMay
                       . filter (isShareableNegativeNode amem tests)
+                      . toList
   case matchingOneOf parentChildren of
     Just node -> return node
     Nothing   -> do
@@ -412,7 +414,7 @@ buildOrShareNegativeNode env parent amem tests = do
                            , rightUnlinked               = ru }
 
       -- Insert node at the head of parent.children
-      writeTVar (nodeChildren parent) $! node:parentChildren
+      writeTVar (nodeChildren parent) $! node Seq.<| parentChildren
 
       -- Insert node at the head of amem.successors
       modifyTVar' (amemSuccessors amem) (node Seq.<|)
@@ -448,6 +450,7 @@ buildOrShareNccNodes env parent (NccCond subconds) earlierConds = do
   parentChildren     <- readTVar (nodeChildren parent)
   let matchingOneOf = headMay
                       . filter (isShareableNccNode bottomOfSubnetwork)
+                      . toList
   case matchingOneOf parentChildren of
     Just node -> return node
     Nothing   -> do
@@ -468,10 +471,10 @@ buildOrShareNccNodes env parent (NccCond subconds) earlierConds = do
 
       -- Insert new at the tail of parent.children (so that the
       -- subnetwork comes first).
-      writeTVar (nodeChildren parent) $! parentChildren ++ [new]
+      writeTVar (nodeChildren parent) $! parentChildren Seq.|> new
 
         -- Insert partner at the head of bottomOfSubnetwork.children.
-      modifyTVar' (nodeChildren bottomOfSubnetwork) (partner:)
+      modifyTVar' (nodeChildren bottomOfSubnetwork) (partner Seq.<|)
 
       -- Note: we have to inform NCC node of existing matches before
       -- informing the partner, otherwise lots of matches would all
@@ -545,7 +548,7 @@ updateNewNodeWithMatchesFromAbove env node = do
 
     JoinNode {} -> do
       savedChildren <- readTVar (nodeChildren parent)
-      writeTVar (nodeChildren parent) [node]
+      writeTVar (nodeChildren parent) (Seq.singleton node)
       forMM_ (setToListT (amemWmes (vprop nodeAmem parent))) $ \wme ->
         rightActivate env wme parent
       writeTVar (nodeChildren parent) savedChildren

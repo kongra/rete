@@ -151,7 +151,7 @@ createEnv = do
   amems   <- newTVar Map.empty
 
   -- Initialize dummies
-  dummyNodeChildren    <- newTVar []
+  dummyNodeChildren    <- newTVar Seq.empty
   dummyNodeTokens      <- newTVar Set.empty
   dummyNodeAllChildren <- newTVar Set.empty
   dummyTokChildren     <- newTVar Set.empty
@@ -520,7 +520,7 @@ leftActivateBmem env tok wme node = do
   newTok <- makeAndInsertToken env tok wme node
 
   -- Left-activate children (solely JoinNodes, do not pass any wme)
-  mapMM_ (leftActivate env newTok Nothing) (readTVar (nodeChildren node))
+  mapMM_ (leftActivate env newTok Nothing) (toListT (nodeChildren node))
 {-# INLINABLE leftActivateBmem #-}
 
 -- UNINDEXED JOIN TESTS
@@ -597,13 +597,13 @@ leftActivateJoinNode env tok _ node = do
 
   unless isAmemEmpty $ do
     children <- readTVar (nodeChildren node)
-    unless (null children) $ do
+    unless (Seq.null children) $ do
       -- Matching wmes are taken from the α memory indexes
       wmes <- matchingAmemWmes (vprop joinTests node) tok amem
       -- Iterate with all wmes over all child nodes and left-activate
       forM_ wmes $ \wme -> do
         let wme' = Just wme
-        forM_ children $ \child ->
+        forM_ (toList children) $ \child ->
           leftActivate env tok wme' child
 {-# INLINABLE leftActivateJoinNode #-}
 
@@ -625,14 +625,14 @@ rightActivateJoinNode env wme node = do
 
   unless isParentEmpty $ do
     children <- readTVar (nodeChildren node)
-    unless (null children) $ do
+    unless (Seq.null children) $ do
       parentToks <- rvprop nodeTokens parent
       unless (Set.null parentToks) $ do
         let tests = vprop joinTests node
             wme'  = Just wme
         forM_ (Set.toList parentToks) $ \tok ->
           when (performJoinTests tests tok wme) $
-            forM_ children $ \child ->
+            forM_ (toList children) $ \child ->
               leftActivate env tok wme' child
 {-# INLINABLE rightActivateJoinNode #-}
 
@@ -663,7 +663,7 @@ leftActivateNegativeNode env tok wme node = do
 
   -- If join results are empty, then inform children
   unlessM (nullTSet (tokNegJoinResults newTok)) $
-    mapMM_ (leftActivate env newTok Nothing) (readTVar (nodeChildren node))
+    mapMM_ (leftActivate env newTok Nothing) (toListT (nodeChildren node))
 {-# INLINABLE leftActivateNegativeNode #-}
 
 rightActivateNegativeNode :: Env -> Wme -> Node -> STM ()
@@ -712,7 +712,7 @@ leftActivateNccNode env tok wme node = do
 
   when (Set.null newTokNccResults) $
     -- no ncc results so inform children
-    mapMM_ (leftActivate env newTok Nothing) (readTVar (nodeChildren node))
+    mapMM_ (leftActivate env newTok Nothing) (toListT (nodeChildren node))
 {-# INLINABLE leftActivateNccNode #-}
 
 -- Ncc PARNTER NODES
@@ -838,14 +838,14 @@ rightUnlink node amem = do
 -- | Performs the left-(re)linking to the parent node.
 relinkToParent :: Node -> Node -> STM ()
 relinkToParent node parent = do
-  modifyTVar' (nodeChildren parent) (node:)
+  modifyTVar' (nodeChildren parent) (node Seq.<|)
   writeTVar   (vprop leftUnlinked node) False
 {-# INLINE relinkToParent #-}
 
 -- | Left-unlinks from the parent.
 leftUnlink :: Node -> Node -> STM ()
 leftUnlink node parent = do
-  modifyTVar' (nodeChildren parent) (filter (/= node))
+  modifyTVar' (nodeChildren parent) (removeFirstFromSeq node)
   writeTVar   (vprop leftUnlinked node) True
 {-# INLINE leftUnlink #-}
 
@@ -947,7 +947,7 @@ propagateWmeRemoval env wme = do
     when (Set.null updatedJresults) $
       -- For each child in jr.owner.node.children
       mapMM_ (leftActivate env owner Nothing)
-        (readTVar (nodeChildren (tokNode owner)))
+        (toListT (nodeChildren (tokNode owner)))
 {-# INLINABLE propagateWmeRemoval #-}
 
 -- DELETING TOKENS
@@ -988,7 +988,7 @@ deleteTokenAndDescendents env removeFromParent removeFromWme tok = do
   case nodeVariant node of
     Bmem {} ->
       whenM (nullTSet (vprop nodeTokens node)) $
-        forMM_ (readTVar (nodeChildren node)) $ \child ->
+        forMM_ (toListT (nodeChildren node)) $ \child ->
           -- Beware, some children may not have amem, e.g. predicate
           -- nodes. If needed introduce a check here.
           rightUnlink child (vprop nodeAmem child)
@@ -1028,7 +1028,7 @@ deleteTokenAndDescendents env removeFromParent removeFromWme tok = do
         nccNode <- rvprop nccPartnerNccNode node
         -- For child in tok.node.ncc-node.children -> leftActivate
         mapMM_ (leftActivate env owner Nothing)
-          (readTVar (nodeChildren (fromJust nccNode)))
+          (toListT (nodeChildren (fromJust nccNode)))
 
     PNode {} ->
       -- For production nodes the only specific behavior is firing a

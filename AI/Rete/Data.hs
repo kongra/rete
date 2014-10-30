@@ -200,7 +200,7 @@ data Node =
 
     -- | children must be a list, because the ordering matters,
     -- e.g. for NCC networks
-  , nodeChildren :: !(TList Node)
+  , nodeChildren :: !(TSeq Node)
 
   , nodeVariant :: !NodeVariant
   }
@@ -209,7 +209,7 @@ data Node =
   {
     -- | children must be a list, because the ordering matters,
     -- e.g. for NCC networks
-    nodeChildren :: !(TList Node)
+    nodeChildren :: !(TSeq Node)
 
   , nodeVariant :: !NodeVariant  -- DTN
   }

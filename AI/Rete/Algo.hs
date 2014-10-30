@@ -24,25 +24,25 @@ import           AI.Rete.Data
 import           Control.Concurrent.STM
 import           Control.Exception (Exception)
 import           Control.Monad (when, unless, liftM, liftM2, forM_)
-import           Data.Foldable (Foldable, toList)
+import           Data.Foldable (toList)
 import qualified Data.HashMap.Strict as Map
 import qualified Data.HashSet as Set
 import           Data.Maybe (isJust, fromJust)
-import qualified Data.Sequence as Seq -- (Seq, breakl, (|>), (><))
+import qualified Data.Sequence as Seq
 import           Data.Typeable
-import           Kask.Control.Monad (whenM, unlessM, mapMM_, forMM_)
+import           Kask.Control.Monad (whenM, unlessM, mapMM_, forMM_, toListM)
 import           Kask.Data.Sequence (insertBeforeFirstOccurence,
                                      removeFirstOccurence)
 import           Safe (headMay)
 
 -- MISC. UTILS
 
--- | A monadic (in STM monad) version of Set.null
+-- | A monadic (in STM monad) version of Set.null.
 nullTSet :: TSet a -> STM Bool
 nullTSet = liftM Set.null . readTVar
 {-# INLINE nullTSet #-}
 
--- | A monadic version of Set.toList
+-- | A monadic version of Set.toList.
 setToListM :: Monad m => m (Set.HashSet a) -> m [a]
 setToListM = liftM Set.toList
 {-# INLINE setToListM #-}
@@ -52,12 +52,7 @@ setToListT :: TSet a -> STM [a]
 setToListT = setToListM . readTVar
 {-# INLINE setToListT #-}
 
--- | A monadic version of Data.Foldable.toList
-toListM :: (Monad m, Foldable f) => m (f a) -> m [a]
-toListM = liftM toList
-{-# INLINE toListM #-}
-
--- | A monadic (in STM monad) version of Data.Foldable.toList
+-- | A monadic (in STM monad) version of Data.Foldable.toList.
 toListT :: TSeq a -> STM [a]
 toListT = toListM . readTVar
 {-# INLINE toListT #-}

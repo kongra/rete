@@ -24,16 +24,15 @@ import           AI.Rete.Data
 import           Control.Concurrent.STM
 import           Control.Exception (Exception)
 import           Control.Monad (when, unless, liftM, liftM2, forM_)
-
 import           Data.Foldable (Foldable, toList)
 import qualified Data.HashMap.Strict as Map
 import qualified Data.HashSet as Set
 import           Data.Maybe (isJust, fromJust)
 import qualified Data.Sequence as Seq -- (Seq, breakl, (|>), (><))
 import           Data.Typeable
-
 import           Kask.Control.Monad (whenM, unlessM, mapMM_, forMM_)
-
+import           Kask.Data.Sequence (insertBeforeFirstOccurence,
+                                     removeFirstOccurence)
 import           Safe (headMay)
 
 -- MISC. UTILS
@@ -62,34 +61,6 @@ toListM = liftM toList
 toListT :: TSeq a -> STM [a]
 toListT = toListM . readTVar
 {-# INLINE toListT #-}
-
--- | Inserts y before the first occurence of x within the
--- sequence. O(i) where i is the position of x in the sequence.
-insertBeforeInSeq :: Eq a =>
-                     a      -- ^ y - the element to insert
-                  -> a      -- ^ x - the sequence member
-                  -> Seq.Seq a  -- ^ the sequence
-                  -> Seq.Seq a
-insertBeforeInSeq y x s = (prefix Seq.|> y) Seq.>< suffix
-  where
-    (prefix, suffix) = Seq.breakl (== x) s
-{-# INLINABLE insertBeforeInSeq #-}
-
--- | Removes the first occurence of the element from the
--- sequence. O(i) where i is the position of the element in the
--- sequence.
-removeFirstFromSeq :: Eq a =>
-                      a          -- ^ the element to remove
-                   -> Seq.Seq a  -- ^ the sequence
-                   -> Seq.Seq a
-removeFirstFromSeq x s
-  | Seq.null   suffix  = prefix
-  | Seq.length ts == 1 = prefix
-  | otherwise          = prefix Seq.>< Seq.index ts 1
-  where
-    (prefix, suffix) = Seq.breakl (== x) s
-    ts               = Seq.tails suffix
-{-# INLINABLE removeFirstFromSeq #-}
 
 -- VARIANTS
 
@@ -806,7 +777,7 @@ relinkToAlphaMemory node = do
       -- insert node into node.amem.successors immediately before
       -- ancestor
       modifyTVar' (amemSuccessors (vprop nodeAmem node))
-        (node `insertBeforeInSeq` ancestor)
+        (node `insertBeforeFirstOccurence` ancestor)
 
     -- insert node at the tail of node.amem.successors
     Nothing -> modifyTVar' (amemSuccessors (vprop nodeAmem node))
@@ -831,7 +802,7 @@ relinkAncestor node =
 -- | Right-unlinks from the α memory.
 rightUnlink :: Node -> Amem -> STM ()
 rightUnlink node amem = do
-  modifyTVar' (amemSuccessors amem) (removeFirstFromSeq node)
+  modifyTVar' (amemSuccessors amem) (removeFirstOccurence node)
   writeTVar   (vprop rightUnlinked node) True
 {-# INLINE rightUnlink #-}
 
@@ -845,7 +816,7 @@ relinkToParent node parent = do
 -- | Left-unlinks from the parent.
 leftUnlink :: Node -> Node -> STM ()
 leftUnlink node parent = do
-  modifyTVar' (nodeChildren parent) (removeFirstFromSeq node)
+  modifyTVar' (nodeChildren parent) (removeFirstOccurence node)
   writeTVar   (vprop leftUnlinked node) True
 {-# INLINE leftUnlink #-}
 

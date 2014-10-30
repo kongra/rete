@@ -25,13 +25,14 @@ import           Control.Concurrent.STM
 import           Control.Exception (Exception)
 import           Control.Monad (when, unless, liftM, liftM2, forM_)
 
+import           Data.Foldable (Foldable, toList)
 import qualified Data.HashMap.Strict as Map
 import qualified Data.HashSet as Set
 import           Data.Maybe (isJust, fromJust)
+import qualified Data.Sequence as Seq -- (Seq, breakl, (|>), (><))
 import           Data.Typeable
 
 import           Kask.Control.Monad (whenM, unlessM, mapMM_, forMM_)
-import           Kask.Data.List (insertBefore)
 
 import           Safe (headMay)
 
@@ -51,6 +52,44 @@ setToListM = liftM Set.toList
 setToListT :: TSet a -> STM [a]
 setToListT = setToListM . readTVar
 {-# INLINE setToListT #-}
+
+-- | A monadic version of Data.Foldable.toList
+toListM :: (Monad m, Foldable f) => m (f a) -> m [a]
+toListM = liftM toList
+{-# INLINE toListM #-}
+
+-- | A monadic (in STM monad) version of Data.Foldable.toList
+toListT :: TSeq a -> STM [a]
+toListT = toListM . readTVar
+{-# INLINE toListT #-}
+
+-- | Inserts y before the first occurence of x within the
+-- sequence. O(i) where i is the position of x in the sequence.
+insertBeforeInSeq :: Eq a =>
+                     a      -- ^ y - the element to insert
+                  -> a      -- ^ x - the sequence member
+                  -> Seq.Seq a  -- ^ the sequence
+                  -> Seq.Seq a
+insertBeforeInSeq y x s = (prefix Seq.|> y) Seq.>< suffix
+  where
+    (prefix, suffix) = Seq.breakl (== x) s
+{-# INLINABLE insertBeforeInSeq #-}
+
+-- | Removes the first occurence of the element from the
+-- sequence. O(i) where i is the position of the element in the
+-- sequence.
+removeFirstFromSeq :: Eq a =>
+                      a          -- ^ the element to remove
+                   -> Seq.Seq a  -- ^ the sequence
+                   -> Seq.Seq a
+removeFirstFromSeq x s
+  | Seq.null   suffix  = prefix
+  | Seq.length ts == 1 = prefix
+  | otherwise          = prefix Seq.>< Seq.index ts 1
+  where
+    (prefix, suffix) = Seq.breakl (== x) s
+    ts               = Seq.tails suffix
+{-# INLINABLE removeFirstFromSeq #-}
 
 -- VARIANTS
 
@@ -285,7 +324,7 @@ activateAmem env amem wme = do
   modifyTVar' (amemWmesByVal  amem) (wmesIndexInsert (wmeVal  wme) wme)
 
   -- right-activate all successors (children)
-  mapMM_ (rightActivate env wme) (readTVar (amemSuccessors amem))
+  mapMM_ (rightActivate env wme) (toListT (amemSuccessors amem))
 {-# INLINABLE activateAmem #-}
 
 -- | Propagates the wme into the corresponding α memories and further
@@ -767,10 +806,11 @@ relinkToAlphaMemory node = do
       -- insert node into node.amem.successors immediately before
       -- ancestor
       modifyTVar' (amemSuccessors (vprop nodeAmem node))
-        (node `insertBefore` ancestor)
+        (node `insertBeforeInSeq` ancestor)
 
     -- insert node at the tail of node.amem.successors
-    Nothing -> modifyTVar' (amemSuccessors (vprop nodeAmem node)) (++ [node])
+    Nothing -> modifyTVar' (amemSuccessors (vprop nodeAmem node))
+                           (Seq.|> node)
 
   writeTVar (vprop rightUnlinked node) False
 {-#  INLINABLE relinkToAlphaMemory #-}
@@ -791,7 +831,7 @@ relinkAncestor node =
 -- | Right-unlinks from the α memory.
 rightUnlink :: Node -> Amem -> STM ()
 rightUnlink node amem = do
-  modifyTVar' (amemSuccessors amem) (filter (/= node))
+  modifyTVar' (amemSuccessors amem) (removeFirstFromSeq node)
   writeTVar   (vprop rightUnlinked node) True
 {-# INLINE rightUnlink #-}
 
@@ -887,7 +927,7 @@ propagateWmeRemoval env wme = do
 
     when (Set.null updatedWmes) $
       -- ... left-unlink all successors of type JoinNode
-      forMM_ (readTVar (amemSuccessors amem)) $ \child ->
+      forMM_ (toListT (amemSuccessors amem)) $ \child ->
         when (isJoinNode child) $ leftUnlink child (nodeParent child)
 
   -- Delete all tokens wme is in. Remove every tokent from it's parent

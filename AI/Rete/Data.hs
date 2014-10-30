@@ -21,8 +21,10 @@ import           Control.Concurrent.STM
 import qualified Data.HashMap.Strict as Map
 import qualified Data.HashSet as Set
 import           Data.Hashable (Hashable, hashWithSalt)
+import qualified Data.Sequence as Seq
 
 type TList a = TVar [a]
+type TSeq  a = TVar (Seq.Seq     a)
 type TSet  a = TVar (Set.HashSet a)
 
 -- | Identifier type. From now on we treat negative identifiers as
@@ -164,7 +166,7 @@ type WmesIndex = (Map.HashMap Symbol (Set.HashSet Wme))
 data Amem =
   Amem
   { -- | Successors must be a list, cause the ordering matters.
-    amemSuccessors :: !(TList Node)
+    amemSuccessors :: !(TSeq Node)
 
     -- | The number of join or negative node using this Amem
   , amemReferenceCount :: !(TVar Int)

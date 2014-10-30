@@ -28,6 +28,7 @@ library
   other-extensions:    Safe
   build-depends:       base >=4.7 && <4.8,
                        stm >= 2.4.3,
+                       containers >= 0.5.5.1,
                        unordered-containers >= 0.2.5.0,
                        hashable >= 1.2.2.0,
                        safe >= 0.3.8,

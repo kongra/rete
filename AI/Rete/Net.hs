@@ -26,6 +26,7 @@ import qualified Data.HashMap.Strict as Map
 import qualified Data.HashSet as Set
 import           Data.List (sortBy)
 import           Data.Maybe (isJust, fromJust)
+import qualified Data.Sequence as Seq
 import           Kask.Control.Monad (whenM, forMM_)
 import           Safe (headMay)
 
@@ -51,7 +52,7 @@ buildOrShareAmem env obj attr val = do
     Just amem -> return amem  -- Happily found.
     Nothing   -> do
       -- No amem found, let's create one.
-      successors <- newTVar []
+      successors <- newTVar Seq.empty
       refCount   <- newTVar 0
 
       wmes       <- newTVar Set.empty
@@ -373,7 +374,7 @@ buildOrShareJoinNode env parent amem tests = do
 
       unless unlinkRight $
         -- Insert node at the head of amem.successors
-        modifyTVar' (amemSuccessors amem) (node:)
+        modifyTVar' (amemSuccessors amem) (node Seq.<|)
 
       unless unlinkLeft $
         -- Add node (to the head) of parent.children
@@ -414,7 +415,7 @@ buildOrShareNegativeNode env parent amem tests = do
       writeTVar (nodeChildren parent) $! node:parentChildren
 
       -- Insert node at the head of amem.successors
-      modifyTVar' (amemSuccessors amem) (node:)
+      modifyTVar' (amemSuccessors amem) (node Seq.<|)
 
       -- Increment amem.reference-count
       modifyTVar' (amemReferenceCount amem) (+1)

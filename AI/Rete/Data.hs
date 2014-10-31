@@ -107,8 +107,7 @@ instance Eq Wme where
 instance Hashable Wme where
   hashWithSalt salt wme = salt `hashWithSalt` wmeId wme
 
--- | Token. We introduce the same structure for standard tokens and
--- for the Dummy Top Token.
+-- | Token.
 data Token =
   Token
   {

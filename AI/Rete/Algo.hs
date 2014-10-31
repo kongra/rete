@@ -20,11 +20,10 @@
 module AI.Rete.Algo where
 
 import           AI.Rete.Data
-
 import           Control.Concurrent.STM
 import           Control.Exception (Exception)
 import           Control.Monad (when, unless, liftM, liftM2, forM_)
-import           Data.Foldable (toList)
+import           Data.Foldable (Foldable, toList)
 import qualified Data.HashMap.Strict as Map
 import qualified Data.HashSet as Set
 import           Data.Maybe (isJust, fromJust)
@@ -42,18 +41,8 @@ nullTSet :: TSet a -> STM Bool
 nullTSet = liftM Set.null . readTVar
 {-# INLINE nullTSet #-}
 
--- | A monadic version of Set.toList.
-setToListM :: Monad m => m (Set.HashSet a) -> m [a]
-setToListM = liftM Set.toList
-{-# INLINE setToListM #-}
-
--- | A monadic (in STM monad) version of Set.toList.
-setToListT :: TSet a -> STM [a]
-setToListT = setToListM . readTVar
-{-# INLINE setToListT #-}
-
 -- | A monadic (in STM monad) version of Data.Foldable.toList.
-toListT :: TSeq a -> STM [a]
+toListT :: Foldable f => TVar (f a) -> STM [a] -- TSeq a -> STM [a]
 toListT = toListM . readTVar
 {-# INLINE toListT #-}
 
@@ -520,12 +509,12 @@ fieldValue Val  = wmeVal
 -- | Matches a token to wmes in an α memory using the α memory indexes.
 matchingAmemWmes :: [JoinTest] -> Token -> Amem -> STM [Wme]
 -- When no tests specified, we simply take all wmes from the α memory
-matchingAmemWmes [] _ amem = setToListT (amemWmes amem)
+matchingAmemWmes [] _ amem = toListT (amemWmes amem)
 matchingAmemWmes tests tok amem = do
   -- When at least one test specified ...
   let wmes     = tokenWmes tok
       (s:sets) = map (amemWmesForTest wmes amem) tests
-  setToListM (foldr (liftM2 Set.intersection) s sets)
+  toListM (foldr (liftM2 Set.intersection) s sets)
 {-# INLINABLE matchingAmemWmes #-}
 
 -- | Uses proper indexes of the α memory to return a set of wmes
@@ -899,10 +888,10 @@ propagateWmeRemoval env wme = do
   -- Delete all tokens wme is in. Remove every tokent from it's parent
   -- token but avoid removing from wme.
   mapMM_ (deleteTokenAndDescendents env True False)
-    (setToListT (wmeTokens wme))
+    (toListT (wmeTokens wme))
 
   -- For every jr in wme.negative-join-results
-  forMM_ (setToListT (wmeNegJoinResults wme)) $ \jr -> do
+  forMM_ (toListT (wmeNegJoinResults wme)) $ \jr -> do
     -- ... remove jr from jr.owner.negative-join-results
     let owner = negativeJoinResultOwner jr
     jresults <- readTVar (tokNegJoinResults owner)
@@ -964,14 +953,14 @@ deleteTokenAndDescendents env removeFromParent removeFromWme tok = do
         rightUnlink node (vprop nodeAmem node)
 
       -- For jr in tok.(neg)-join-results
-      forMM_ (setToListT (tokNegJoinResults tok)) $ \jr ->
+      forMM_ (toListT (tokNegJoinResults tok)) $ \jr ->
         -- remove jr from jr.wme.negative-join-results
         modifyTVar' (wmeNegJoinResults (negativeJoinResultWme jr))
           (Set.delete jr)
 
     NccNode {} ->
       -- For result-tok in tok.ncc-results ...
-      forMM_ (setToListT (tokNccResults tok)) $ \resultTok -> do
+      forMM_ (toListT (tokNccResults tok)) $ \resultTok -> do
           -- ... remove result-tok from result-tok.wme.tokens,
           modifyTVar' (wmeTokens (fromJust (tokWme resultTok)))
             (Set.delete resultTok)

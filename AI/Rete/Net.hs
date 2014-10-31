@@ -541,7 +541,7 @@ updateNewNodeWithMatchesFromAbove _ DummyTopNode {} =
 updateNewNodeWithMatchesFromAbove env node = do
   let parent = nodeParent node
   case nodeVariant parent of
-    Bmem {nodeTokens = toks} -> forMM_ (setToListT toks) $ \tok ->
+    Bmem {nodeTokens = toks} -> forMM_ (toListT toks) $ \tok ->
       leftActivate env tok Nothing node
 
     DTN {} -> leftActivate env (envDummyTopToken env) Nothing node
@@ -549,17 +549,17 @@ updateNewNodeWithMatchesFromAbove env node = do
     JoinNode {} -> do
       savedChildren <- readTVar (nodeChildren parent)
       writeTVar (nodeChildren parent) (Seq.singleton node)
-      forMM_ (setToListT (amemWmes (vprop nodeAmem parent))) $ \wme ->
+      forMM_ (toListT (amemWmes (vprop nodeAmem parent))) $ \wme ->
         rightActivate env wme parent
       writeTVar (nodeChildren parent) savedChildren
 
     NegativeNode {} ->
-      forMM_ (setToListT (vprop nodeTokens parent)) $ \tok ->
+      forMM_ (toListT (vprop nodeTokens parent)) $ \tok ->
         whenM (nullTSet (tokNegJoinResults tok)) $
           leftActivate env tok Nothing node
 
     NccNode {} ->
-      forMM_ (setToListT (vprop nodeTokens parent)) $ \tok ->
+      forMM_ (toListT (vprop nodeTokens parent)) $ \tok ->
         whenM (nullTSet (tokNccResults tok)) $
           leftActivate env tok Nothing node
 

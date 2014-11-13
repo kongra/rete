@@ -158,7 +158,7 @@ instance Hashable Token where
 -- | Field
 data Field = Obj | Attr | Val deriving (Show, Eq)
 
--- | α Memory Index
+-- | Wmes Index
 type WmesIndex = (Map.HashMap Symbol (Set.HashSet Wme))
 
 -- | α Memory
@@ -327,10 +327,11 @@ instance Hashable NegativeJoinResult where
   hashWithSalt salt (NegativeJoinResult owner wme) =
     salt `hashWithSalt` owner `hashWithSalt` wme
 
+-- | A distance for describing locations of symbols in tokens.
+type Distance = Int
+
 -- | SymbolLocation describes the binding for a variable within a token.
-data SymbolLocation = SymbolLocation
-                     !Field               -- ^ the field w in Wme
-                     !Int  -- ^ distance within the token
+data SymbolLocation = SymbolLocation !Field !Distance
 
 -- | A map of variable bindings for productions
 type VariableBindings = Map.HashMap Symbol SymbolLocation
@@ -349,11 +350,7 @@ data Actx =
 type Action = Actx -> STM ()
 
 -- | The Working Memory key
-data WmeKey = WmeKey
-              !Symbol  -- ^ obj
-              !Symbol  -- ^ attr
-              !Symbol  -- ^ val
-            deriving Eq
+data WmeKey = WmeKey !Symbol !Symbol !Symbol deriving Eq
 
 instance Hashable WmeKey where
   hashWithSalt salt (WmeKey obj attr val) =

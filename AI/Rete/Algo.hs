@@ -62,7 +62,7 @@ rvprop accessor = readTVar . vprop accessor
 -- Variant type recognition could be implemented using TemplateHaskell
 -- and derive, but let's keep dependencies slim if possible. See:
 -- http://stackoverflow.com/questions/6088935/
---        checking-for-a-particular-data-constructor
+-- checking-for-a-particular-data-constructor
 
 -- | Returns True iff the node is a JoinNode.
 isJoinNode :: Node -> Bool
@@ -104,6 +104,7 @@ createEnv = do
   attrs   <- newTVar Map.empty
   vals    <- newTVar Map.empty
   amems   <- newTVar Map.empty
+  prods   <- newTVar Set.empty
 
   -- Initialize dummies
   dummyNodeChildren    <- newTVar Seq.empty
@@ -126,7 +127,8 @@ createEnv = do
              , envWmesByVal       = vals
              , envAmems           = amems
              , envDummyTopNode    = dummyNode
-             , envDummyTopToken   = dummyTok }
+             , envDummyTopToken   = dummyTok
+             , envProductions     = prods }
 {-# INLINABLE createEnv #-}
 
 data IDOverflow = IDOverflow deriving (Show, Typeable)
@@ -358,7 +360,7 @@ addWmeA actx = addWme (actxEnv actx)
 -- | Creates an empty Wme
 createWme :: Env -> Symbol -> Symbol -> Symbol -> STM Wme
 createWme env obj attr val = do
-  id'       <- genid env
+  id'       <- genid   env
   amems     <- newTVar []
   toks      <- newTVar Set.empty
   njResults <- newTVar Set.empty
@@ -376,7 +378,7 @@ createWme env obj attr val = do
 
 makeToken :: Env -> Token -> Maybe Wme -> Node -> STM Token
 makeToken env parentTok wme node = do
-  id'        <- genid env
+  id'        <- genid   env
   children   <- newTVar Set.empty
   njResults  <- newTVar Set.empty
   nccResults <- newTVar Set.empty
@@ -902,7 +904,7 @@ propagateWmeRemoval env wme = do
     when (Set.null updatedJresults) $
       -- For each child in jr.owner.node.children
       mapMM_ (leftActivate env owner Nothing)
-        (toListT (nodeChildren (tokNode owner)))
+        ((toListT . nodeChildren . tokNode) owner)
 {-# INLINABLE propagateWmeRemoval #-}
 
 -- DELETING TOKENS
@@ -983,7 +985,7 @@ deleteTokenAndDescendents env removeFromParent removeFromWme tok = do
         nccNode <- rvprop nccPartnerNccNode node
         -- For child in tok.node.ncc-node.children -> leftActivate
         mapMM_ (leftActivate env owner Nothing)
-          (toListT (nodeChildren (fromJust nccNode)))
+          ((toListT . nodeChildren . fromJust ) nccNode)
 
     PNode {} ->
       -- For production nodes the only specific behavior is firing a

@@ -54,25 +54,28 @@ instance Hashable Symbol where
 -- | Environment
 data Env =
   Env
-  { -- | The state of the Env-wide ID generator
+  { -- | State of the Env-wide ID generator
     envId :: !(TVar ID)
 
-    -- | The registry of (interned) Symbols
+    -- | Registry of (interned) Symbols
   , envSymbolsRegistry :: !(TVar SymbolsRegistry)
 
-    -- | The Working Memory consists of a registry of all Wmes
+    -- | Working Memory consists of a registry of all Wmes
     -- (indexed by WmeKey) and 3 Wme indexes by Wme Field value.
   , envWmesRegistry :: !(TVar WmesRegistry)
   , envWmesByObj    :: !(TVar WmesIndex)
   , envWmesByAttr   :: !(TVar WmesIndex)
   , envWmesByVal    :: !(TVar WmesIndex)
 
-    -- | The registry of known α memories
+    -- | Registry of known α memories
   , envAmems :: !(TVar AmemsRegistry)
 
     -- | Dummies
   , envDummyTopNode  :: !Node
   , envDummyTopToken :: !Token
+
+    -- | Defined productions
+  , envProductions :: !(TSet Node)
   }
 
 -- | Working Memory Element (Wme)
@@ -82,7 +85,6 @@ data Wme =
     -- | An internal identifier of this wme
     wmeId :: !ID
 
-    -- | fields
   , wmeObj  :: !Symbol
   , wmeAttr :: !Symbol
   , wmeVal  :: !Symbol
@@ -222,6 +224,8 @@ instance Hashable Node where
   hashWithSalt salt Node {nodeId = id'} = salt `hashWithSalt` id'
   hashWithSalt salt DummyTopNode {}     = salt `hashWithSalt` (-1 :: ID)
 
+-- | Variant of a (Rete) Node. Keeps values specific to a role the
+-- Node plays in the network.
 data NodeVariant =
   DTN
   {
@@ -289,8 +293,6 @@ data NodeVariant =
   {
     nodeTokens :: !(TSet Token)
 
-  , pnodeName :: !String  -- ^ Name of the production
-
     -- | The action to fire on activation
   , pnodeAction :: !Action
 
@@ -301,8 +303,8 @@ data NodeVariant =
   , pnodeVariableBindings :: !VariableBindings
   }
 
--- The Dummy Top Node is a β memory with no parent and a single dummy
--- top token.
+-- | A distance for describing locations of symbols in tokens.
+type Distance = Int
 
 -- | JoinTest
 data JoinTest =
@@ -310,7 +312,7 @@ data JoinTest =
   {
     joinTestField1   :: !Field
   , joinTestField2   :: !Field
-  , joinTestDistance :: !Int
+  , joinTestDistance :: !Distance
   }
   deriving Eq
 
@@ -326,9 +328,6 @@ data NegativeJoinResult =
 instance Hashable NegativeJoinResult where
   hashWithSalt salt (NegativeJoinResult owner wme) =
     salt `hashWithSalt` owner `hashWithSalt` wme
-
--- | A distance for describing locations of symbols in tokens.
-type Distance = Int
 
 -- | SymbolLocation describes the binding for a variable within a token.
 data SymbolLocation = SymbolLocation !Field !Distance

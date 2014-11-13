@@ -21,14 +21,15 @@ module AI.Rete.Net where
 import           AI.Rete.Algo
 import           AI.Rete.Data
 import           Control.Concurrent.STM
-import           Control.Monad (forM_, liftM, liftM3, unless)
+import           Control.Monad (forM_, liftM, liftM3, unless, when)
 import           Data.Foldable (toList)
 import qualified Data.HashMap.Strict as Map
 import qualified Data.HashSet as Set
 import           Data.List (sortBy)
 import           Data.Maybe (isJust, fromJust)
 import qualified Data.Sequence as Seq
-import           Kask.Control.Monad (whenM, forMM_)
+import           Kask.Control.Monad (whenM, unlessM, forMM_)
+import           Kask.Data.Sequence (removeFirstOccurence)
 import           Safe (headMay)
 
 -- | Tells whether or not the Symbols is a Variable.
@@ -110,7 +111,7 @@ activateAmemOnCreation env amem obj attr val = do
     modifyTVar' (amemWmesByVal  amem) (wmesIndexInsert (wmeVal  wme) wme)
 {-# INLINE activateAmemOnCreation #-}
 
--- NODE CREATION (COMMON PART(S)
+-- NODE CREATION (COMMON PART(S))
 
 -- | Creates and returns a new Node using the arguments. It DOES NOT
 -- add the created node to it's parent.children.
@@ -181,7 +182,7 @@ isNccCond _          = False
 {-# INLINE isNccCond #-}
 
 -- | Puts the Cond into it's canonical form. The canonical form is the
--- one that uses solely Symbol and not Strings or Ses.
+-- one that uses solely Symbol and not Strings nor S-es.
 canonicalCond :: Env -> Cond -> STM Cond
 
 canonicalCond env (NccCond cs) =
@@ -568,6 +569,17 @@ updateNewNodeWithMatchesFromAbove env node = do
 
 -- ADDING PRODUCTIONS: TODO
 
+-- | Defined a new production. Returns a Rete node for the production,
+-- one with PNode variant or Nothing when a production with a specified
+-- name already exists.
+addProduction :: Env
+              -> String            -- ^ Production name
+              -> [Cond]            -- ^ Conditions
+              -> Action            -- ^ Then action
+              -> Maybe Action      -- ^ Revoke action
+              -> STM (Maybe Node)  -- ^ Rete node for the production
+addProduction _ _ _ _ _ = undefined
+
 -- | Configures variable bindings for the conditions of a production.
 variableBindingsForConds :: [Cond] -> VariableBindings
 variableBindingsForConds conds = loop Map.empty (indexedPositiveConds conds)
@@ -609,10 +621,114 @@ valA Actx {actxNode = node, actxWmes = wmes} s =
       Just (fieldValue f (fromJust (wmes !! dist)))
 {-# INLINABLE valA #-}
 
--- DELETING NODES: TODO
+-- DELETING NODES
 
-deleteNodeAndAnyUnusedAncestor :: Node -> STM ()
-deleteNodeAndAnyUnusedAncestor _ =
-  undefined
+hasDeletableNodeTokens :: Node -> Bool
+hasDeletableNodeTokens node = case nodeVariant node of
+  Bmem         {} -> True
+  NegativeNode {} -> True
+  NccNode      {} -> True
+  PNode        {} -> True  -- Extend this with new variants if necessary.
+  _               -> False
+{-# INLINE hasDeletableNodeTokens #-}
 
--- REMOVING PRODUCTIONS: TODO
+hasNodeAmem :: Node -> Bool
+hasNodeAmem node = case nodeVariant node of
+  JoinNode {}     -> True
+  NegativeNode {} -> True
+  _               -> False
+{-# INLINE hasNodeAmem #-}
+
+notLeftUnlinked :: Node -> STM Bool
+notLeftUnlinked node = case nodeVariant node of
+  JoinNode {} -> liftM not (rvprop leftUnlinked node)
+  _           -> return True
+{-# INLINE notLeftUnlinked #-}
+
+deleteNodeAndAnyUnusedAncestor :: Env -> Node -> STM ()
+deleteNodeAndAnyUnusedAncestor env node@Node {} = do
+  -- Please notice, we operate in Node here, but not in DummyTopNode.
+
+  -- For NccNodes, delete the partner too.
+  when (isNccNode node) $
+    deleteNodeAndAnyUnusedAncestor env (vprop nccPartner node)
+
+  -- Clean up any tokens the node contains.
+  when (hasDeletableNodeTokens node) $
+    forMM_ (toListT (vprop nodeTokens node)) $ \tok ->
+      -- When removing the token we remove it both from its wme and
+      -- its parent (tok).
+      deleteTokenAndDescendents env True True tok
+
+  -- Do special cleanup in NccPartner.
+  when (isNccPartner node) $
+    forMM_ (toListT (vprop nccPartnerNewResultBuffer node)) $ \tok ->
+      -- When removing the token we remove it both from its wme and
+      -- its parent (tok).
+      deleteTokenAndDescendents env True True tok
+
+  -- Deal with the α memory.
+  when (hasNodeAmem node) $
+    unlessM (isRightUnlinked node) $ do
+      -- Remove node from node.amem.successors
+      let amem   = vprop nodeAmem node
+      modifyTVar' (amemSuccessors amem) (removeFirstOccurence node)
+      count <- readTVar (amemReferenceCount amem)
+      -- Decrement the count
+      writeTVar (amemReferenceCount amem) $! count - 1
+      -- If the updated count is 0 (i.e. original 1), delete amem
+      when (count == 1) (deleteAmem env amem)
+
+  -- Deal with the parent.
+  let parent = nodeParent node
+  whenM (notLeftUnlinked node) $
+    -- Remove node from parent.children
+    modifyTVar' (nodeChildren parent) (removeFirstOccurence node)
+
+  when (isJoinNode node) $
+    -- A parent of a join node is either a Bmem or DTN. Remove node
+    -- from parent.bmemAllChildren.
+    modifyTVar' (vprop bmemAllChildren parent) (Set.delete node)
+
+  if isBmem parent then
+    -- For Bmems we have to check both children and allChildren
+    (do emptyAll      <- nullTSet (vprop bmemAllChildren parent)
+        emptyChildren <- liftM Seq.null (readTVar (nodeChildren parent))
+        when (emptyChildren && emptyAll) $
+          deleteNodeAndAnyUnusedAncestor env parent)
+    else
+      whenM (liftM Seq.null (readTVar (nodeChildren parent))) $
+        deleteNodeAndAnyUnusedAncestor env parent
+
+-- For DummyTopNode we don't do anything
+deleteNodeAndAnyUnusedAncestor _ DummyTopNode {} = return ()
+{-# NOINLINE deleteNodeAndAnyUnusedAncestor #-}
+
+deleteAmem :: Env -> Amem -> STM ()
+deleteAmem
+  Env  { envAmems = amems }
+  Amem { amemObj  = obj
+       , amemAttr = attr
+       , amemVal  = val }
+  = modifyTVar' amems (Map.delete (WmeKey obj attr val))
+{-# INLINE deleteAmem #-}
+
+-- REMOVING PRODUCTIONS
+
+-- | Removes a production given as a production Node (the one with
+-- PNode variant).
+removeProduction :: Env -> Node -> STM Bool
+removeProduction env@Env { envProductions = prods } node = do
+  prodset <- readTVar prods
+  if Set.member node prodset then
+    (do writeTVar prods $! Set.delete node prodset
+        deleteNodeAndAnyUnusedAncestor env node
+        return True)
+
+    else return False
+{-# INLINE removeProduction #-}
+
+-- | Works like removeProduction inside an action (of a production).
+removeProductionA :: Actx -> Node -> STM Bool
+removeProductionA actx = removeProduction (actxEnv actx)
+{-# INLINE removeProductionA #-}

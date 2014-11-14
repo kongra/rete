@@ -17,7 +17,51 @@
 -- This module contains mechanisms of managing facts and propagating
 -- related within the Rete network.
 ------------------------------------------------------------------------
-module AI.Rete.Algo where
+module AI.Rete.Algo
+    (
+      -- * 'Env' related operations
+      createEnv
+    , genstr
+    , genstrD
+    , genid
+
+      -- * 'Wme' operations
+    , addWme
+    , addWmeA
+    , removeWme
+    , removeWmeA
+
+      -- * (Internal) utilities
+    , vprop
+    , rvprop
+    , nullTSet
+    , toListT
+    , fieldValue
+
+      -- * (Internal) 'Symbol' stuff
+    , wildcardSymbol
+    , internSymbol
+    , sToSymbol
+
+      -- * (Internal) activation procedures
+    , leftActivate
+    , rightActivate
+
+      -- * (Internal) UL
+    , rightUnlink
+    , isRightUnlinked
+
+      -- * (Internal) 'NodeVariant' predicates
+    , isJoinNode
+    , isNegativeNode
+    , isNccNode
+    , isNccPartner
+
+      -- * (Internal) data manipulation
+    , wmesIndexInsert
+    , deleteTokenAndDescendents
+    )
+    where
 
 import           AI.Rete.Data
 import           Control.Concurrent.STM

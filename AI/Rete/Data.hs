@@ -15,7 +15,47 @@
 --
 -- Contains the definitions of Rete data structures.
 ------------------------------------------------------------------------
-module AI.Rete.Data where
+module AI.Rete.Data
+    (
+      -- * Environment
+      Env (..)
+
+      -- * Symbols
+    , Symbol (..)
+    , S      (..)
+
+      -- * Production components
+    , Action
+    , Actx (..)
+    , Cond (..)
+
+      -- * (Internal) elementary, supporting data-types
+    , TSet
+    , ID
+
+      -- * (Internal) structure of Rete network
+    , Amem        (..)
+    , Node        (..)
+    , NodeVariant (..)
+
+      -- * (Internal) data Rete operates on
+    , Token              (..)
+    , Wme                (..)
+    , NegativeJoinResult (..)
+
+      -- * (Internal) indexes and registries
+    , WmesIndex
+    , WmeKey (..)
+    , SymbolsRegistry
+
+      -- * (Internal) data used during joins and (more generally)
+      -- accessing information inside 'Token's and 'Wme's
+    , JoinTest       (..)
+    , SymbolLocation (..)
+    , Field          (..)
+    , VariableBindings
+    )
+    where
 
 import           Control.Concurrent.STM
 import qualified Data.HashMap.Strict as Map

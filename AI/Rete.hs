@@ -17,12 +17,43 @@
 ------------------------------------------------------------------------
 module AI.Rete
     (
-      c
+      -- * 'Env'ironment
+      Env
+    , createEnv
+
+      -- * 'Symbol's
+    , S (..)
+
+      -- * 'Cond'itions
+    , Cond
+    , c
     , neg
     , ncc
-    ) where
 
+      -- * 'Action's
+    , Action
+    , Actx
+
+      -- * Adding/removing 'Wme's
+    , addWme
+    , addWmeA
+    , removeWme
+    , removeWmeA
+
+      -- * Adding/removing productions
+    , addProduction
+    , addProductionA
+    , removeProduction
+    , removeProductionA
+
+      -- * Accessing information in actions
+    , valA
+    )
+    where
+
+import AI.Rete.Algo
 import AI.Rete.Data
+import AI.Rete.Net
 
 class C a where
   -- | Creates a positive condition.

@@ -16,7 +16,18 @@
 -- This module contains routines for managing the Rete network
 -- structure.
 ------------------------------------------------------------------------
-module AI.Rete.Net where
+module AI.Rete.Net
+    (
+      -- * Adding/removing productions
+      addProduction
+    , addProductionA
+    , removeProduction
+    , removeProductionA
+
+      -- * Accessing information in actions
+    , valA
+    )
+    where
 
 import           AI.Rete.Algo
 import           AI.Rete.Data
@@ -167,13 +178,13 @@ isPosCond PosS    {} = True
 isPosCond _          = False
 {-# INLINE isPosCond #-}
 
--- | Tells whether or not the Cond is a negative one.
-isNegCond :: Cond -> Bool
-isNegCond NegCond {} = True
-isNegCond NegStr  {} = True
-isNegCond NegS    {} = True
-isNegCond _          = False
-{-# INLINE isNegCond #-}
+-- -- | Tells whether or not the Cond is a negative one.
+-- isNegCond :: Cond -> Bool
+-- isNegCond NegCond {} = True
+-- isNegCond NegStr  {} = True
+-- isNegCond NegS    {} = True
+-- isNegCond _          = False
+-- {-# INLINE isNegCond #-}
 
 -- | Tells whether or not the Cond is a Ncc cond.
 isNccCond :: Cond -> Bool

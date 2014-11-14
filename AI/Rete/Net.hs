@@ -567,18 +567,46 @@ updateNewNodeWithMatchesFromAbove env node = do
     _ -> error "Illegal parent when updateNewNodeWithMatchesFromAbove!"
 {-# INLINABLE updateNewNodeWithMatchesFromAbove #-}
 
--- ADDING PRODUCTIONS: TODO
+-- ADDING PRODUCTIONS
 
--- | Defined a new production. Returns a Rete node for the production,
--- one with PNode variant or Nothing when a production with a specified
--- name already exists.
+-- | Adds a new production and returns its Node (having PNode variant).
 addProduction :: Env
-              -> String            -- ^ Production name
-              -> [Cond]            -- ^ Conditions
-              -> Action            -- ^ Then action
-              -> Maybe Action      -- ^ Revoke action
-              -> STM (Maybe Node)  -- ^ Rete node for the production
-addProduction _ _ _ _ _ = undefined
+              -> [Cond]        -- ^ Conditions
+              -> Action        -- ^ Then action
+              -> Maybe Action  -- ^ Revoke action
+              -> STM Node      -- ^ Rete node for the production
+addProduction env conds action revokeAction = do
+  -- Conds must be turned into their canonical form and ordered to put
+  -- positive conds in front.
+  cconds <- liftM sortConds (mapM (canonicalCond env) conds)
+  parent <- buildOrShareNetworkForConditions env
+              (envDummyTopNode env) cconds []
+
+  let vbindings = variableBindingsForConds cconds
+  toks <- newTVar Set.empty
+  node <- newNode env parent
+          PNode { nodeTokens            = toks
+                , pnodeAction           = action
+                , pnodeRevokeAction     = revokeAction
+                , pnodeVariableBindings = vbindings}
+
+  -- Add node to parent's children.
+  modifyTVar' (nodeChildren parent) (node Seq.<|)
+
+  -- Add the node to the registry in the env
+  modifyTVar' (envProductions env) (Set.insert node)
+
+  -- Update with matches from above.
+  updateNewNodeWithMatchesFromAbove env node
+
+  -- Done.
+  return node
+{-# INLINABLE addProduction #-}
+
+-- | Works like 'addProduction' inside an action (of a production).
+addProductionA :: Actx -> [Cond] -> Action -> Maybe Action -> STM Node
+addProductionA actx = addProduction (actxEnv actx)
+{-# INLINE addProductionA #-}
 
 -- | Configures variable bindings for the conditions of a production.
 variableBindingsForConds :: [Cond] -> VariableBindings
@@ -716,7 +744,8 @@ deleteAmem
 -- REMOVING PRODUCTIONS
 
 -- | Removes a production given as a production Node (the one with
--- PNode variant).
+-- PNode variant). Returns True on successful removal and False, when
+-- the production was already removed.
 removeProduction :: Env -> Node -> STM Bool
 removeProduction env@Env { envProductions = prods } node = do
   prodset <- readTVar prods
@@ -726,7 +755,7 @@ removeProduction env@Env { envProductions = prods } node = do
         return True)
 
     else return False
-{-# INLINE removeProduction #-}
+{-# INLINABLE removeProduction #-}
 
 -- | Works like removeProduction inside an action (of a production).
 removeProductionA :: Actx -> Node -> STM Bool

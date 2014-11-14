@@ -2,9 +2,9 @@ name:                Rete
 version:             0.1.0.0
 synopsis:            An implementation of Rete/UL algorithm
 description:         Provides a Haskell implementation of the Rete/UL
-                     algorithm as described in "Production Matching
+                     algorithm, as described in "Production Matching
                      for Large Learning Systems" Robert Doorenbos PhD
-                     Thesis using STM.
+                     Thesis, using STM.
 license:             BSD3
 license-file:        LICENSE
 author:              Konrad Grzanek
@@ -24,6 +24,7 @@ library
                      AI.Rete.Data
                      AI.Rete.Algo
                      AI.Rete.Net
+                     AI.Rete.Print
   -- other-modules:
   other-extensions:  Safe
   build-depends:     base >=4.7 && <4.8,

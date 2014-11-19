@@ -64,7 +64,9 @@ module AI.Rete.Algo
     where
 
 import           AI.Rete.Data
-import           Control.Concurrent.STM
+import           Control.Concurrent.STM (STM, TVar, newTVar,
+                                         readTVar, modifyTVar', writeTVar,
+                                         throwSTM)
 import           Control.Exception (Exception)
 import           Control.Monad (when, unless, liftM, liftM2, forM_)
 import           Data.Foldable (Foldable, toList)

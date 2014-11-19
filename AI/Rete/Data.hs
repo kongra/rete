@@ -57,7 +57,7 @@ module AI.Rete.Data
     )
     where
 
-import           Control.Concurrent.STM
+import           Control.Concurrent.STM (STM, TVar)
 import qualified Data.HashMap.Strict as Map
 import qualified Data.HashSet as Set
 import           Data.Hashable (Hashable, hashWithSalt)

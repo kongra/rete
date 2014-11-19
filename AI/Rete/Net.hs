@@ -31,7 +31,8 @@ module AI.Rete.Net
 
 import           AI.Rete.Algo
 import           AI.Rete.Data
-import           Control.Concurrent.STM
+import           Control.Concurrent.STM (STM, newTVar, readTVar, modifyTVar',
+                                         writeTVar)
 import           Control.Monad (forM_, liftM, liftM3, unless, when)
 import           Data.Foldable (toList)
 import qualified Data.HashMap.Strict as Map

@@ -37,6 +37,7 @@ module AI.Rete.Algo
     , nullTSet
     , toListT
     , fieldValue
+    , getId
 
       -- * (Internal) 'Symbol' stuff
     , wildcardSymbol
@@ -64,9 +65,7 @@ module AI.Rete.Algo
     where
 
 import           AI.Rete.Data
-import           Control.Concurrent.STM (STM, TVar, newTVar,
-                                         readTVar, modifyTVar', writeTVar,
-                                         throwSTM)
+import           Control.Concurrent.STM
 import           Control.Exception (Exception)
 import           Control.Monad (when, unless, liftM, liftM2, forM_)
 import           Data.Foldable (Foldable, toList)
@@ -137,6 +136,23 @@ isNccPartner node = case nodeVariant node of
   (NccPartner {}) -> True
   _               -> False
 {-# INLINE isNccPartner #-}
+
+-- | Represents the objects that have an accessible ID
+class WithId a where getId :: a -> ID
+
+instance WithId Symbol where
+  getId (Symbol   id' _) = id'
+  getId (Variable id' _) = id'
+
+instance WithId Wme where getId Wme {wmeId = id'} = id'
+
+instance WithId Token where
+  getId Token         {tokId = id'} = id'
+  getId DummyTopToken {}            = -1
+
+instance WithId Node where
+  getId Node         {nodeId = id'} = id'
+  getId DummyTopNode {}             = -1
 
 -- ENVIRONMENT, GENERATING IDS
 

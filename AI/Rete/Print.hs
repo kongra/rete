@@ -194,8 +194,39 @@ defaultOpts =
   , optsPToks                    = False
   , optsPLocations               = False }
 
--- TODO: META-CONFS
--- with(out)Ids, with(out)Toks, with(out)Tests, with(out)Amems
+-- META OPTS.
+withIds, withoutIds :: Opts -> Opts
+withIds    = withSymbolIds
+           . withWmeIds
+           . withTokIds
+           . withNodeIds
+withoutIds = withoutSymbolIds
+           . withoutWmeIds
+           . withoutTokIds
+           . withoutNodeIds
+
+withToks, withoutToks :: Opts -> Opts
+withToks    = withWmeToks    . withNodeToks
+withoutToks = withoutWmeToks . withoutNodeToks
+
+withNodeToks, withoutNodeToks :: Opts -> Opts
+withNodeToks    = withBmemToks
+                . withNegativeToks
+                . withNccToks
+                . withPToks
+withoutNodeToks = withoutBmemToks
+                . withoutNegativeToks
+                . withoutNccToks
+                . withoutPToks
+
+withTests, withoutTests :: Opts -> Opts
+withTests    = withJoinTests    . withNegativeTests
+withoutTests = withoutJoinTests . withoutNegativeTests
+
+-- SPECIFIC OPTS.
+withAmems, withoutAmems :: Opts -> Opts
+withAmems    = withWmeAmems    . withJoinAmems    . withNegativeAmems
+withoutAmems = withoutWmeAmems . withoutJoinAmems . withoutNegativeAmems
 
 withSymbolIds, withoutSymbolIds :: Opts -> Opts
 withSymbolIds    o = o { optsSymbolIds = True  }

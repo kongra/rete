@@ -113,6 +113,7 @@ data Opts =
 
   , optsTokIds                   :: !Bool
   , optsTokWmes                  :: !Bool
+  , optsTokWmesSimple            :: !Bool
   , optsTokParents               :: !Bool
   , optsTokNodes                 :: !Bool
   , optsTokChildren              :: !Bool
@@ -123,6 +124,7 @@ data Opts =
   , optsAmemFields               :: !Bool
   , optsAmemRefcount             :: !Bool
   , optsAmemWmes                 :: !Bool
+  , optsAmemWmesSimple           :: !Bool
 
   , optsNodeIds                  :: !Bool
   , optsUl                       :: !Bool
@@ -160,6 +162,7 @@ defaultOpts =
 
   , optsTokIds                   = False
   , optsTokWmes                  = False
+  , optsTokWmesSimple            = True  -- TODO
   , optsTokParents               = False
   , optsTokNodes                 = False
   , optsTokChildren              = False
@@ -168,8 +171,9 @@ defaultOpts =
   , optsTokOwners                = False
 
   , optsAmemFields               = True
-  , optsAmemRefcount             = True
+  , optsAmemRefcount             = False
   , optsAmemWmes                 = False
+  , optsAmemWmesSimple           = True  -- TODO
 
   , optsNodeIds                  = False
   , optsUl                       = True
@@ -195,167 +199,171 @@ defaultOpts =
   , optsPLocations               = False }
 
 -- META OPTS.
-withIds, withoutIds :: Opts -> Opts
-withIds    = withSymbolIds
-           . withWmeIds
-           . withTokIds
-           . withNodeIds
-withoutIds = withoutSymbolIds
-           . withoutWmeIds
-           . withoutTokIds
-           . withoutNodeIds
+withIds, noIds :: Opts -> Opts
+withIds = withSymbolIds
+        . withWmeIds
+        . withTokIds
+        . withNodeIds
+noIds   = noSymbolIds
+        . noWmeIds
+        . noTokIds
+        . noNodeIds
 
-withToks, withoutToks :: Opts -> Opts
-withToks    = withWmeToks    . withNodeToks
-withoutToks = withoutWmeToks . withoutNodeToks
+withToks, noToks :: Opts -> Opts
+withToks = withWmeToks . withNodeToks
+noToks   = noWmeToks   . noNodeToks
 
-withNodeToks, withoutNodeToks :: Opts -> Opts
-withNodeToks    = withBmemToks
-                . withNegativeToks
-                . withNccToks
-                . withPToks
-withoutNodeToks = withoutBmemToks
-                . withoutNegativeToks
-                . withoutNccToks
-                . withoutPToks
+withNodeToks, noNodeToks :: Opts -> Opts
+withNodeToks = withBmemToks
+             . withNegativeToks
+             . withNccToks
+             . withPToks
+noNodeToks   = noBmemToks
+             . noNegativeToks
+             . noNccToks
+             . noPToks
 
-withTests, withoutTests :: Opts -> Opts
-withTests    = withJoinTests    . withNegativeTests
-withoutTests = withoutJoinTests . withoutNegativeTests
+withTests, noTests :: Opts -> Opts
+withTests = withJoinTests    . withNegativeTests
+noTests   = noJoinTests . noNegativeTests
+
+withNodeAmems, noNodeAmems :: Opts -> Opts
+withNodeAmems = withJoinAmems . withNegativeAmems
+noNodeAmems   = noJoinAmems   . noNegativeAmems
+
+withAmems, noAmems :: Opts -> Opts
+withAmems = withWmeAmems . withNodeAmems
+noAmems   = noWmeAmems   . noNodeAmems
 
 -- SPECIFIC OPTS.
-withAmems, withoutAmems :: Opts -> Opts
-withAmems    = withWmeAmems    . withJoinAmems    . withNegativeAmems
-withoutAmems = withoutWmeAmems . withoutJoinAmems . withoutNegativeAmems
+withSymbolIds, noSymbolIds :: Opts -> Opts
+withSymbolIds o = o { optsSymbolIds = True  }
+noSymbolIds   o = o { optsSymbolIds = False }
 
-withSymbolIds, withoutSymbolIds :: Opts -> Opts
-withSymbolIds    o = o { optsSymbolIds = True  }
-withoutSymbolIds o = o { optsSymbolIds = False }
+withWmeIds, noWmeIds :: Opts -> Opts
+withWmeIds o = o { optsWmeIds = True  }
+noWmeIds   o = o { optsWmeIds = False }
 
-withWmeIds, withoutWmeIds :: Opts -> Opts
-withWmeIds    o = o { optsWmeIds = True  }
-withoutWmeIds o = o { optsWmeIds = False }
+withWmeAmems, noWmeAmems :: Opts -> Opts
+withWmeAmems o = o { optsWmeAmems = True  }
+noWmeAmems   o = o { optsWmeAmems = False }
 
-withWmeAmems, withoutWmeAmems :: Opts -> Opts
-withWmeAmems    o = o { optsWmeAmems = True  }
-withoutWmeAmems o = o { optsWmeAmems = False }
+withWmeToks, noWmeToks :: Opts -> Opts
+withWmeToks o = o { optsWmeToks = True  }
+noWmeToks   o = o { optsWmeToks = False }
 
-withWmeToks, withoutWmeToks :: Opts -> Opts
-withWmeToks    o = o { optsWmeToks = True  }
-withoutWmeToks o = o { optsWmeToks = False }
+withWmeNegativeJoinResults, noWmeNegativeJoinResults :: Opts -> Opts
+withWmeNegativeJoinResults o = o { optsWmeNegativeJoinResults = True  }
+noWmeNegativeJoinResults   o = o { optsWmeNegativeJoinResults = False }
 
-withWmeNegativeJoinResults, withoutWmeNegativeJoinResults :: Opts -> Opts
-withWmeNegativeJoinResults    o = o { optsWmeNegativeJoinResults = True  }
-withoutWmeNegativeJoinResults o = o { optsWmeNegativeJoinResults = False }
+withTokIds, noTokIds :: Opts -> Opts
+withTokIds o = o { optsTokIds = True  }
+noTokIds   o = o { optsTokIds = False }
 
-withTokIds, withoutTokIds :: Opts -> Opts
-withTokIds    o = o { optsTokIds = True  }
-withoutTokIds o = o { optsTokIds = False }
+withTokWmes, noTokWmes :: Opts -> Opts
+withTokWmes o = o { optsTokWmes = True  }
+noTokWmes   o = o { optsTokWmes = False }
 
-withTokWmes, withoutTokWmes :: Opts -> Opts
-withTokWmes    o = o { optsTokWmes = True  }
-withoutTokWmes o = o { optsTokWmes = False }
+withTokParents, noTokParents :: Opts -> Opts
+withTokParents o = o { optsTokParents = True  }
+noTokParents   o = o { optsTokParents = False }
 
-withTokParents, withoutTokParents :: Opts -> Opts
-withTokParents    o = o { optsTokParents = True  }
-withoutTokParents o = o { optsTokParents = False }
+withTokNodes, noTokNodes :: Opts -> Opts
+withTokNodes o = o { optsTokNodes = True  }
+noTokNodes   o = o { optsTokNodes = False }
 
-withTokNodes, withoutTokNodes :: Opts -> Opts
-withTokNodes    o = o { optsTokNodes = True  }
-withoutTokNodes o = o { optsTokNodes = False }
+withTokChildren, noTokChildren :: Opts -> Opts
+withTokChildren o = o { optsTokChildren = True  }
+noTokChildren   o = o { optsTokChildren = False }
 
-withTokChildren, withoutTokChildren :: Opts -> Opts
-withTokChildren    o = o { optsTokChildren = True  }
-withoutTokChildren o = o { optsTokChildren = False }
+withTokJoinResults, noTokJoinResults :: Opts -> Opts
+withTokJoinResults o = o { optsTokJoinResults = True  }
+noTokJoinResults   o = o { optsTokJoinResults = False }
 
-withTokJoinResults, withoutTokJoinResults :: Opts -> Opts
-withTokJoinResults    o = o { optsTokJoinResults = True  }
-withoutTokJoinResults o = o { optsTokJoinResults = False }
+withTokNccResults, noTokNccResults :: Opts -> Opts
+withTokNccResults o = o { optsTokNccResults = True  }
+noTokNccResults   o = o { optsTokNccResults = False }
 
-withTokNccResults, withoutTokNccResults :: Opts -> Opts
-withTokNccResults    o = o { optsTokNccResults = True  }
-withoutTokNccResults o = o { optsTokNccResults = False }
+withTokOwners, noTokOwners :: Opts -> Opts
+withTokOwners o = o { optsTokOwners = True  }
+noTokOwners   o = o { optsTokOwners = False }
 
-withTokOwners, withoutTokOwners :: Opts -> Opts
-withTokOwners    o = o { optsTokOwners = True  }
-withoutTokOwners o = o { optsTokOwners = False }
+withAmemFields, noAmemFields :: Opts -> Opts
+withAmemFields o = o { optsAmemFields = True  }
+noAmemFields   o = o { optsAmemFields = False }
 
-withAmemFields, withoutAmemFields :: Opts -> Opts
-withAmemFields    o = o { optsAmemFields = True  }
-withoutAmemFields o = o { optsAmemFields = False }
+withAmemRefcount, noAmemRefcount :: Opts -> Opts
+withAmemRefcount o = o { optsAmemRefcount = True  }
+noAmemRefcount   o = o { optsAmemRefcount = False }
 
-withAmemRefcount, withoutAmemRefcount :: Opts -> Opts
-withAmemRefcount    o = o { optsAmemRefcount = True  }
-withoutAmemRefcount o = o { optsAmemRefcount = False }
+withAmemWmes, noAmemWmes :: Opts -> Opts
+withAmemWmes o = o { optsAmemWmes = True  }
+noAmemWmes   o = o { optsAmemWmes = False }
 
-withAmemWmes, withoutAmemWmes :: Opts -> Opts
-withAmemWmes    o = o { optsAmemWmes = True  }
-withoutAmemWmes o = o { optsAmemWmes = False }
+withNodeIds, noNodeIds :: Opts -> Opts
+withNodeIds o = o { optsNodeIds = True  }
+noNodeIds   o = o { optsNodeIds = False }
 
-withNodeIds, withoutNodeIds :: Opts -> Opts
-withNodeIds    o = o { optsNodeIds = True  }
-withoutNodeIds o = o { optsNodeIds = False }
+withUl, noUl :: Opts -> Opts
+withUl o = o { optsUl = True  }
+noUl   o = o { optsUl = False }
 
-withUl, withoutUl :: Opts -> Opts
-withUl    o = o { optsUl = True  }
-withoutUl o = o { optsUl = False }
+withBmemToks, noBmemToks :: Opts -> Opts
+withBmemToks o = o { optsBmemToks = True  }
+noBmemToks   o = o { optsBmemToks = False }
 
-withBmemToks, withoutBmemToks :: Opts -> Opts
-withBmemToks    o = o { optsBmemToks = True  }
-withoutBmemToks o = o { optsBmemToks = False }
+withJoinTests, noJoinTests :: Opts -> Opts
+withJoinTests o = o { optsJoinTests = True  }
+noJoinTests   o = o { optsJoinTests = False }
 
-withJoinTests, withoutJoinTests :: Opts -> Opts
-withJoinTests    o = o { optsJoinTests = True  }
-withoutJoinTests o = o { optsJoinTests = False }
+withJoinAmems, noJoinAmems :: Opts -> Opts
+withJoinAmems o = o { optsJoinAmems = True  }
+noJoinAmems   o = o { optsJoinAmems = False }
 
-withJoinAmems, withoutJoinAmems :: Opts -> Opts
-withJoinAmems    o = o { optsJoinAmems = True  }
-withoutJoinAmems o = o { optsJoinAmems = False }
+withJoinNearestAncestors, noJoinNearestAncestors :: Opts -> Opts
+withJoinNearestAncestors o = o { optsJoinNearestAncestors = True  }
+noJoinNearestAncestors   o = o { optsJoinNearestAncestors = False }
 
-withJoinNearestAncestors, withoutJoinNearestAncestors :: Opts -> Opts
-withJoinNearestAncestors    o = o { optsJoinNearestAncestors = True  }
-withoutJoinNearestAncestors o = o { optsJoinNearestAncestors = False }
+withNegativeTests, noNegativeTests :: Opts -> Opts
+withNegativeTests o = o { optsNegativeTests = True  }
+noNegativeTests   o = o { optsNegativeTests = False }
 
-withNegativeTests, withoutNegativeTests :: Opts -> Opts
-withNegativeTests    o = o { optsNegativeTests = True  }
-withoutNegativeTests o = o { optsNegativeTests = False }
+withNegativeAmems, noNegativeAmems :: Opts -> Opts
+withNegativeAmems o = o { optsNegativeAmems = True  }
+noNegativeAmems   o = o { optsNegativeAmems = False }
 
-withNegativeAmems, withoutNegativeAmems :: Opts -> Opts
-withNegativeAmems    o = o { optsNegativeAmems = True  }
-withoutNegativeAmems o = o { optsNegativeAmems = False }
+withNegativeNearestAncestors, noNegativeNearestAncestors :: Opts -> Opts
+withNegativeNearestAncestors o = o { optsNegativeNearestAncestors = True  }
+noNegativeNearestAncestors   o = o { optsNegativeNearestAncestors = False }
 
-withNegativeNearestAncestors, withoutNegativeNearestAncestors :: Opts -> Opts
-withNegativeNearestAncestors    o = o { optsNegativeNearestAncestors = True  }
-withoutNegativeNearestAncestors o = o { optsNegativeNearestAncestors = False }
+withNegativeToks, noNegativeToks :: Opts -> Opts
+withNegativeToks o = o { optsNegativeToks = True  }
+noNegativeToks   o = o { optsNegativeToks = False }
 
-withNegativeToks, withoutNegativeToks :: Opts -> Opts
-withNegativeToks    o = o { optsNegativeToks = True  }
-withoutNegativeToks o = o { optsNegativeToks = False }
+withNccConjucts, noNccConjucts :: Opts -> Opts
+withNccConjucts o = o { optsNccConjucts = True  }
+noNccConjucts   o = o { optsNccConjucts = False }
 
-withNccConjucts, withoutNccConjucts :: Opts -> Opts
-withNccConjucts    o = o { optsNccConjucts = True  }
-withoutNccConjucts o = o { optsNccConjucts = False }
+withNccPartners, noNccPartners :: Opts -> Opts
+withNccPartners o = o { optsNccPartners = True  }
+noNccPartners   o = o { optsNccPartners = False }
 
-withNccPartners, withoutNccPartners :: Opts -> Opts
-withNccPartners    o = o { optsNccPartners = True  }
-withoutNccPartners o = o { optsNccPartners = False }
+withNccNodes, noNccNodes :: Opts -> Opts
+withNccNodes o = o { optsNccNodes = True  }
+noNccNodes   o = o { optsNccNodes = False }
 
-withNccNodes, withoutNccNodes :: Opts -> Opts
-withNccNodes    o = o { optsNccNodes = True  }
-withoutNccNodes o = o { optsNccNodes = False }
+withNccToks, noNccToks :: Opts -> Opts
+withNccToks o = o { optsNccToks = True  }
+noNccToks   o = o { optsNccToks = False }
 
-withNccToks, withoutNccToks :: Opts -> Opts
-withNccToks    o = o { optsNccToks = True  }
-withoutNccToks o = o { optsNccToks = False }
+withNccNewResultBuffers, noNccNewResultBuffers :: Opts -> Opts
+withNccNewResultBuffers o = o { optsNccNewResultBuffers = True  }
+noNccNewResultBuffers   o = o { optsNccNewResultBuffers = False }
 
-withNccNewResultBuffers, withoutNccNewResultBuffers :: Opts -> Opts
-withNccNewResultBuffers    o = o { optsNccNewResultBuffers = True  }
-withoutNccNewResultBuffers o = o { optsNccNewResultBuffers = False }
+withPToks, noPToks :: Opts -> Opts
+withPToks o = o { optsPToks = True  }
+noPToks   o = o { optsPToks = False }
 
-withPToks, withoutPToks :: Opts -> Opts
-withPToks    o = o { optsPToks = True  }
-withoutPToks o = o { optsPToks = False }
-
-withPLocations, withoutPLocations :: Opts -> Opts
-withPLocations    o = o { optsPLocations = True  }
-withoutPLocations o = o { optsPLocations = False }
+withPLocations, noPLocations :: Opts -> Opts
+withPLocations o = o { optsPLocations = True  }
+noPLocations   o = o { optsPLocations = False }

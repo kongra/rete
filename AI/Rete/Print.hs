@@ -45,12 +45,39 @@ import Kask.Data.Function (compose)
 
 -- VIS.-TREE NODES
 
+type ShowVN = Opts -> STM ShowS
+type AdjsVN = Opts -> STM [VN]
+
 data VN =
-  VN { vnShowM :: !(Opts -> STM ShowS)
-     , vnAdjsU :: !(Opts -> STM [VN])
-     , vnAdjsD :: !(Opts -> STM [VN]) }
+  VN { vnShowM :: !ShowVN
+     , vnAdjsU :: !AdjsVN
+     , vnAdjsD :: !AdjsVN }
 
 instance ShowM STM Opts VN where showM o VN { vnShowM = f } = f o
+
+-- LEAF/PROPERTY VNs
+
+emptyAdjs :: Monad m => a -> m [t]
+emptyAdjs = return . const []
+{-# INLINE emptyAdjs #-}
+
+leafVN :: ShowVN -> VN
+leafVN svn = VN { vnShowM = svn
+                , vnAdjsU = emptyAdjs
+                , vnAdjsD = emptyAdjs }
+{-# INLINE leafVN #-}
+
+propVN :: ShowS -> [VN] -> VN
+propVN name vns = VN { vnShowM = s
+                     , vnAdjsU = a
+                     , vnAdjsD = a }
+  where
+    s _ = return name
+    a = return . const vns
+{-# INLINE propVN #-}
+
+leafPropVN :: ShowS -> [ShowVN] -> VN
+leafPropVN name svns = propVN name (map leafVN svns)
 
 -- CONFIGURATIONS FOR TRAVERSING UP/DOWN
 

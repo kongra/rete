@@ -24,6 +24,7 @@ import AI.Rete.Data
 import Control.Concurrent.STM
 import Data.Tree.Print
 import Kask.Data.Function (compose)
+-- import Kask.Control.Monad (mapMM)
 
 -- WHAT TO VISUALIZE (type s)
 -- wmes
@@ -39,15 +40,22 @@ import Kask.Data.Function (compose)
 --   possibly other kinds of nodes ...
 
 -- WHAT WE ACTUALLY NEED FOR s
--- property nodes, flat nodes, flat property nodes
 -- tree+, tree- - THE API
 -- tree+Impl, tree-Impl - IMPLEMENTATIONS
+
+-- VN CONSTRUCTION (ABSTRACTION)
+
+class ToVN a where
+  toVN     :: a -> VN
+  toShowVN :: a -> ShowVN
 
 -- VIS.-TREE NODES
 
 type ShowVN = Opts -> STM ShowS
 type AdjsVN = Opts -> STM [VN]
 
+-- | A Visible Node (hence VN), the basic data structure for the tree
+-- visualization process, compatible with the treeprint API.
 data VN =
   VN { vnShowM :: !ShowVN
      , vnAdjsU :: !AdjsVN
@@ -121,11 +129,6 @@ instance ShowM STM Opts Symbol where
 stmImpl :: Impl STM ShowS
 stmImpl = str
 
--- STRING CONSTANTS
-comma, commspc :: ShowS
-comma   = showString ","
-commspc = showString ", "
-
 -- OPTIONS
 
 data Opts =
@@ -134,6 +137,7 @@ data Opts =
     optsSymbolIds                :: !Bool
 
   , optsWmeIds                   :: !Bool
+  , optsWmeSymbolic              :: !Bool
   , optsWmeAmems                 :: !Bool
   , optsWmeToks                  :: !Bool
   , optsWmeNegativeJoinResults   :: !Bool
@@ -183,6 +187,7 @@ defaultOpts =
   { optsSymbolIds                = False
 
   , optsWmeIds                   = False
+  , optsWmeSymbolic              = True
   , optsWmeAmems                 = False
   , optsWmeToks                  = False
   , optsWmeNegativeJoinResults   = False
@@ -265,11 +270,8 @@ withAmems, noAmems :: Oswitch
 withAmems = withWmeAmems . withNodeAmems
 noAmems   = noWmeAmems   . noNodeAmems
 
-withWmesSymbolic, withWmesEplicit :: Oswitch
-withWmesSymbolic = withAmemWmesSymbolic . withTokWmesSymbolic
-withWmesEplicit  = withAmemWmesExplicit . withTokWmesExplicit
-
 -- SPECIFIC OPTS.
+
 withSymbolIds, noSymbolIds :: Oswitch
 withSymbolIds o = o { optsSymbolIds = True  }
 noSymbolIds   o = o { optsSymbolIds = False }
@@ -277,6 +279,10 @@ noSymbolIds   o = o { optsSymbolIds = False }
 withWmeIds, noWmeIds :: Oswitch
 withWmeIds o = o { optsWmeIds = True  }
 noWmeIds   o = o { optsWmeIds = False }
+
+withWmesSymbolic, withWmesExplicit :: Oswitch
+withWmesSymbolic o = o { optsWmeSymbolic = True }
+withWmesExplicit o = o { optsWmeSymbolic = False }
 
 withWmeAmems, noWmeAmems :: Oswitch
 withWmeAmems o = o { optsWmeAmems = True  }
@@ -409,3 +415,87 @@ noPToks   o = o { optsPToks = False }
 withPLocations, noPLocations :: Oswitch
 withPLocations o = o { optsPLocations = True  }
 noPLocations   o = o { optsPLocations = False }
+
+-- WMES VISUALIZATION
+
+instance ToVN Wme where
+  toVN wme = VN { vnShowM = showWme  wme
+                , vnAdjsU = adjsWmeU wme
+                , vnAdjsD = adjsWmeD wme }
+
+  toShowVN wme = showWme wme
+
+showWme :: Wme -> Opts -> STM ShowS
+showWme
+  Wme  { wmeId           = id'
+       , wmeObj          = obj
+       , wmeAttr         = attr
+       , wmeVal          = val }
+  Opts { optsWmeSymbolic = osymbolic
+       , optsWmeIds      = owmeIds } =
+    if osymbolic
+      then return $ compose [wS, showString (show id')]
+      else do
+        let s = compose [lparenS
+                        , showS obj, commaS
+                        , showS attr, commaS
+                        , showS val, rparenS]
+        return $ if owmeIds then s `withIdS` id' else s
+
+adjsWmeU :: Wme -> Opts -> STM [VN]
+adjsWmeU = adjsWmeD
+
+adjsWmeD :: Wme -> Opts -> STM [VN]
+adjsWmeD _ _ = undefined
+-- adjsWmeD
+--   Wme  { wmeAmems                   = amems
+--        , wmeTokens                  = toks
+--        , wmeNegJoinResults          = nresults}
+--   Opts { optsWmeAmems               = oamems
+--        , optsWmeToks                = otoks
+--        , optsWmeNegativeJoinResults = onresults} = do
+
+--     amems' <- if oamems then (return []) else (return [])
+--     -- toks'     <- if otoks     then tokNVs     else (return [])
+--     -- nresults' <- if onresults then nresultNVs else (return [])
+--     return amems'
+--     where
+--       amemsS  = showString ":amems"
+--       amemNVs = return (leafPropVN amemsS (mapM toShowVN (readTVar amems)))
+
+--       -- toksS     = showString ":toks"
+--       -- nresultsS = showString "neg. join results (owner)"
+
+--       --
+--       -- tokNVs     = leafPropVN toksS     (map toShowVN (readTVar toks))
+--       -- nresultNVs = leafPropVN nresultsS (map toShowVN (readTVar nresults))
+
+-- STRING CONSTANTS
+
+commaS, commspcS :: ShowS
+commaS   = showString ","
+commspcS = showString ", "
+
+wS :: ShowS
+wS = showString "w"
+
+lparenS, rparenS :: ShowS
+lparenS = showString "("
+rparenS = showString ")"
+
+dashS :: ShowS
+dashS = showString "-"
+
+-- STRING MANIPULATION/GENERATION UTILITIES
+
+showS :: Show a => a -> ShowS
+showS = showString . show
+{-# INLINE showS #-}
+
+idS :: ID -> ShowS
+idS id' = compose [dashS, showS id']
+{-# INLINE idS #-}
+
+withIdS :: ShowS -> ID -> ShowS
+withIdS s id' = compose [s, idS id']
+{-# INLINE withIdS #-}

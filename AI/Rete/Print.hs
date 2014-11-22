@@ -22,9 +22,11 @@ module AI.Rete.Print where
 import AI.Rete.Algo (getId)
 import AI.Rete.Data
 import Control.Concurrent.STM
+import Control.Monad (liftM)
+import Data.Foldable (Foldable)
 import Data.Tree.Print
+import Kask.Control.Monad (toListM)
 import Kask.Data.Function (compose)
--- import Kask.Control.Monad (mapMM)
 
 -- WHAT TO VISUALIZE (type s)
 -- wmes
@@ -43,59 +45,59 @@ import Kask.Data.Function (compose)
 -- tree+, tree- - THE API
 -- tree+Impl, tree-Impl - IMPLEMENTATIONS
 
--- VN CONSTRUCTION (ABSTRACTION)
+-- Vn CONSTRUCTION (ABSTRACTION)
 
-class ToVN a where
-  toVN     :: a -> VN
-  toShowVN :: a -> ShowVN
+class ToVn a where
+  toVn     :: a -> Vn
+  toShowVn :: a -> ShowVn
 
 -- VIS.-TREE NODES
 
-type ShowVN = Opts -> STM ShowS
-type AdjsVN = Opts -> STM [VN]
+type ShowVn = Opts -> STM ShowS
+type AdjsVn = Opts -> STM [Vn]
 
--- | A Visible Node (hence VN), the basic data structure for the tree
+-- | A Visible Node (hence Vn), the basic data structure for the tree
 -- visualization process, compatible with the treeprint API.
-data VN =
-  VN { vnShowM :: !ShowVN
-     , vnAdjsU :: !AdjsVN
-     , vnAdjsD :: !AdjsVN }
+data Vn =
+  Vn { vnShowM :: !ShowVn
+     , vnAdjsU :: !AdjsVn
+     , vnAdjsD :: !AdjsVn }
 
-instance ShowM STM Opts VN where showM o VN { vnShowM = f } = f o
+instance ShowM STM Opts Vn where showM o Vn { vnShowM = f } = f o
 
--- LEAF/PROPERTY VNs
+-- LEAF/PROPERTY Vns
 
 emptyAdjs :: Monad m => a -> m [t]
 emptyAdjs = return . const []
 {-# INLINE emptyAdjs #-}
 
-leafVN :: ShowVN -> VN
-leafVN svn = VN { vnShowM = svn
+leafVn :: ShowVn -> Vn
+leafVn svn = Vn { vnShowM = svn
                 , vnAdjsU = emptyAdjs
                 , vnAdjsD = emptyAdjs }
-{-# INLINE leafVN #-}
+{-# INLINE leafVn #-}
 
-propVN :: ShowS -> [VN] -> VN
-propVN name vns = VN { vnShowM = s
+propVn :: ShowS -> [Vn] -> Vn
+propVn name vns = Vn { vnShowM = s
                      , vnAdjsU = a
                      , vnAdjsD = a }
   where
     s _ = return name
     a = return . const vns
-{-# INLINE propVN #-}
+{-# INLINE propVn #-}
 
-leafPropVN :: ShowS -> [ShowVN] -> VN
-leafPropVN name svns = propVN name (map leafVN svns)
+leafPropVn :: ShowS -> [ShowVn] -> Vn
+leafPropVn name svns = propVn name (map leafVn svns)
 
 -- CONFIGURATIONS FOR TRAVERSING UP/DOWN
 
-adjsU, adjsD :: Adjs STM Opts VN
-adjsU o VN { vnAdjsU = f } = f o
+adjsU, adjsD :: Adjs STM Opts Vn
+adjsU o Vn { vnAdjsU = f } = f o
 {-# INLINE adjsU #-}
-adjsD o VN { vnAdjsD = f } = f o
+adjsD o Vn { vnAdjsD = f } = f o
 {-# INLINE adjsD #-}
 
-type VConf = Conf STM ShowS Opts VN
+type VConf = Conf STM ShowS Opts Vn
 
 confU, confD :: VConf
 confU = Conf { impl     = stmImpl
@@ -418,12 +420,12 @@ noPLocations   o = o { optsPLocations = False }
 
 -- WMES VISUALIZATION
 
-instance ToVN Wme where
-  toVN wme = VN { vnShowM = showWme  wme
+instance ToVn Wme where
+  toVn wme = Vn { vnShowM = showWme  wme
                 , vnAdjsU = adjsWmeU wme
                 , vnAdjsD = adjsWmeD wme }
 
-  toShowVN wme = showWme wme
+  toShowVn = showWme
 
 showWme :: Wme -> Opts -> STM ShowS
 showWme
@@ -442,10 +444,10 @@ showWme
                         , showS val, rparenS]
         return $ if owmeIds then s `withIdS` id' else s
 
-adjsWmeU :: Wme -> Opts -> STM [VN]
+adjsWmeU :: Wme -> Opts -> STM [Vn]
 adjsWmeU = adjsWmeD
 
-adjsWmeD :: Wme -> Opts -> STM [VN]
+adjsWmeD :: Wme -> Opts -> STM [Vn]
 adjsWmeD _ _ = undefined
 -- adjsWmeD
 --   Wme  { wmeAmems                   = amems
@@ -460,15 +462,21 @@ adjsWmeD _ _ = undefined
 --     -- nresults' <- if onresults then nresultNVs else (return [])
 --     return amems'
 --     where
---       amemsS  = showString ":amems"
---       amemNVs = return (leafPropVN amemsS (mapM toShowVN (readTVar amems)))
+--       label   = showString ":amems"
+--       amemNVs = return (leafPropVn label (mapMM toShowVn (readTVar amems)))
 
 --       -- toksS     = showString ":toks"
 --       -- nresultsS = showString "neg. join results (owner)"
 
 --       --
---       -- tokNVs     = leafPropVN toksS     (map toShowVN (readTVar toks))
---       -- nresultNVs = leafPropVN nresultsS (map toShowVN (readTVar nresults))
+--       -- tokNVs     = leafPropVn toksS     (map toShowVn (readTVar toks))
+--       -- nresultNVs = leafPropVn nresultsS (map toShowVn (readTVar nresults))
+
+-- AMEMS VISUALIZATION
+
+instance ToVn Amem where
+  toVn     _ = undefined
+  toShowVn _ = undefined
 
 -- STRING CONSTANTS
 
@@ -486,7 +494,7 @@ rparenS = showString ")"
 dashS :: ShowS
 dashS = showString "-"
 
--- STRING MANIPULATION/GENERATION UTILITIES
+-- MISC. UTILITIES
 
 showS :: Show a => a -> ShowS
 showS = showString . show
@@ -499,3 +507,7 @@ idS id' = compose [dashS, showS id']
 withIdS :: ShowS -> ID -> ShowS
 withIdS s id' = compose [s, idS id']
 {-# INLINE withIdS #-}
+
+toShowVnsM :: (Monad m, Foldable f, ToVn a) => m (f a) -> m [ShowVn]
+toShowVnsM = liftM (map toShowVn) . toListM
+{-# INLINE toShowVnsM #-}

@@ -31,6 +31,8 @@ module AI.Rete.Data
 
       -- * (Internal) elementary, supporting data-types
     , TSet
+    , TSeq
+    , TList
     , ID
 
       -- * (Internal) structure of Rete network

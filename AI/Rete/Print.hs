@@ -24,6 +24,7 @@ import AI.Rete.Data
 import Control.Concurrent.STM
 import Control.Monad (liftM)
 import Data.Foldable (Foldable)
+import Data.Maybe (catMaybes)
 import Data.Tree.Print
 import Kask.Control.Monad (toListM)
 import Kask.Data.Function (compose)
@@ -65,7 +66,7 @@ data Vn =
 
 instance ShowM STM Opts Vn where showM o Vn { vnShowM = f } = f o
 
--- LEAF/PROPERTY Vns
+-- LEAF/PROPERTY Vns CREATION
 
 emptyAdjs :: Monad m => a -> m [t]
 emptyAdjs = return . const []
@@ -88,6 +89,41 @@ propVn name vns = Vn { vnShowM = s
 
 leafPropVn :: ShowS -> [ShowVn] -> Vn
 leafPropVn name svns = propVn name (map leafVn svns)
+{- INLINE leafPropVn -}
+
+showS :: Show a => a -> ShowS
+showS = showString . show
+{-# INLINE showS #-}
+
+idS :: ID -> ShowS
+idS id' = compose [dashS, showS id']
+{-# INLINE idS #-}
+
+withIdS :: ShowS -> ID -> ShowS
+withIdS s id' = compose [s, idS id']
+{-# INLINE withIdS #-}
+
+toShowVnsM :: (Monad m, Foldable f, ToVn a) => m (f a) -> m [ShowVn]
+toShowVnsM = liftM (map toShowVn) . toListM
+{-# INLINE toShowVnsM #-}
+
+optLeafPropVn :: (Monad m, Foldable f, ToVn a) =>
+                 Bool
+              -> String
+              -> m (f a)
+              -> m (Maybe Vn)
+optLeafPropVn False _    _  = return Nothing
+optLeafPropVn True label xs = do
+  shows' <- toShowVnsM xs
+  if null shows'
+     then return Nothing
+     else return (Just (leafPropVn (showString label) shows'))
+{-# INLINABLE optLeafPropVn #-}
+
+optVns :: Monad m => [Maybe Vn] -> m [Vn]
+optVns = return . catMaybes
+{-# INLINE optVns #-}
+
 
 -- CONFIGURATIONS FOR TRAVERSING UP/DOWN
 
@@ -448,29 +484,31 @@ adjsWmeU :: Wme -> Opts -> STM [Vn]
 adjsWmeU = adjsWmeD
 
 adjsWmeD :: Wme -> Opts -> STM [Vn]
-adjsWmeD _ _ = undefined
--- adjsWmeD
---   Wme  { wmeAmems                   = amems
---        , wmeTokens                  = toks
---        , wmeNegJoinResults          = nresults}
---   Opts { optsWmeAmems               = oamems
---        , optsWmeToks                = otoks
---        , optsWmeNegativeJoinResults = onresults} = do
+adjsWmeD
+  Wme  { wmeAmems                   = amems
+       , wmeTokens                  = toks
+       , wmeNegJoinResults          = njrs}
+  Opts { optsWmeAmems               = oamems
+       , optsWmeToks                = otoks
+       , optsWmeNegativeJoinResults = onjrs} = do
 
---     amems' <- if oamems then (return []) else (return [])
---     -- toks'     <- if otoks     then tokNVs     else (return [])
---     -- nresults' <- if onresults then nresultNVs else (return [])
---     return amems'
---     where
---       label   = showString ":amems"
---       amemNVs = return (leafPropVn label (mapMM toShowVn (readTVar amems)))
+    amemVn <- optLeafPropVn oamems "amems"            (readTVar amems)
+    toksVn <- optLeafPropVn otoks  "toks"             (readTVar toks)
+    njrsVn <- optLeafPropVn onjrs  "neg-join-results" (readTVar njrs)
+    optVns [amemVn, toksVn, njrsVn]
+{-# INLINABLE adjsWmeD #-}
 
---       -- toksS     = showString ":toks"
---       -- nresultsS = showString "neg. join results (owner)"
+-- TOKENS VISUALIZATION
 
---       --
---       -- tokNVs     = leafPropVn toksS     (map toShowVn (readTVar toks))
---       -- nresultNVs = leafPropVn nresultsS (map toShowVn (readTVar nresults))
+instance ToVn Token where
+  toVn     _ = undefined
+  toShowVn _ = undefined
+
+-- NEGATIVE JOIN RESULTS
+
+instance ToVn NegativeJoinResult where
+  toVn     _ = undefined
+  toShowVn _ = undefined
 
 -- AMEMS VISUALIZATION
 
@@ -493,21 +531,3 @@ rparenS = showString ")"
 
 dashS :: ShowS
 dashS = showString "-"
-
--- MISC. UTILITIES
-
-showS :: Show a => a -> ShowS
-showS = showString . show
-{-# INLINE showS #-}
-
-idS :: ID -> ShowS
-idS id' = compose [dashS, showS id']
-{-# INLINE idS #-}
-
-withIdS :: ShowS -> ID -> ShowS
-withIdS s id' = compose [s, idS id']
-{-# INLINE withIdS #-}
-
-toShowVnsM :: (Monad m, Foldable f, ToVn a) => m (f a) -> m [ShowVn]
-toShowVnsM = liftM (map toShowVn) . toListM
-{-# INLINE toShowVnsM #-}

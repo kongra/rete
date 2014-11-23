@@ -16,7 +16,7 @@ build-type:          Simple
 cabal-version:       >=1.10
 
 library
-  ghc-options:       -O2 -W -Wall -Werror -funbox-strict-fields
+  ghc-options:       -O2 -W -Wall -funbox-strict-fields
   if impl(ghc >= 6.8)
     ghc-options:     -fwarn-tabs
 

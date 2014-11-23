@@ -26,7 +26,7 @@ import Control.Monad (liftM)
 import Data.Foldable (Foldable)
 import Data.Maybe (catMaybes)
 import Data.Tree.Print
-import Kask.Control.Monad (toListM)
+import Kask.Control.Monad (toListM, mapMM)
 import Kask.Data.Function (compose)
 
 -- WHAT TO VISUALIZE (type s)
@@ -156,7 +156,7 @@ boundless conf = conf { maxDepth = Nothing }
 -- PRINTING STRINGS
 
 instance ShowM STM Opts Symbol where
-  showM Opts {optsSymbolIds = ids} s =
+  showM Opts {oSymbolIds = ids} s =
     if ids
       then return (compose [ showString (show (getId s))
                            , showString ('-':show s)])
@@ -172,105 +172,101 @@ stmImpl = str
 data Opts =
   Opts
   {
-    optsSymbolIds                :: !Bool
+    oSymbolIds                :: !Bool
 
-  , optsWmeIds                   :: !Bool
-  , optsWmeSymbolic              :: !Bool
-  , optsWmeAmems                 :: !Bool
-  , optsWmeToks                  :: !Bool
-  , optsWmeNegativeJoinResults   :: !Bool
+  , oWmeIds                   :: !Bool
+  , oWmeSymbolic              :: !Bool
+  , oWmeAmems                 :: !Bool
+  , oWmeToks                  :: !Bool
+  , oWmeNegativeJoinResults   :: !Bool
 
-  , optsTokIds                   :: !Bool
-  , optsTokWmes                  :: !Bool
-  , optsTokWmesSymbolic          :: !Bool
-  , optsTokParents               :: !Bool
-  , optsTokNodes                 :: !Bool
-  , optsTokChildren              :: !Bool
-  , optsTokJoinResults           :: !Bool
-  , optsTokNccResults            :: !Bool
-  , optsTokOwners                :: !Bool
+  , oTokIds                   :: !Bool
+  , oTokWmes                  :: !Bool
+  , oTokParents               :: !Bool
+  , oTokNodes                 :: !Bool
+  , oTokChildren              :: !Bool
+  , oTokJoinResults           :: !Bool
+  , oTokNccResults            :: !Bool
+  , oTokOwners                :: !Bool
 
-  , optsAmemFields               :: !Bool
-  , optsAmemRefcount             :: !Bool
-  , optsAmemWmes                 :: !Bool
-  , optsAmemWmesSymbolic         :: !Bool
+  , oAmemFields               :: !Bool
+  , oAmemRefcount             :: !Bool
+  , oAmemWmes                 :: !Bool
 
-  , optsNodeIds                  :: !Bool
-  , optsUl                       :: !Bool
+  , oNodeIds                  :: !Bool
+  , oUl                       :: !Bool
 
-  , optsBmemToks                 :: !Bool
+  , oBmemToks                 :: !Bool
 
-  , optsJoinTests                :: !Bool
-  , optsJoinAmems                :: !Bool
-  , optsJoinNearestAncestors     :: !Bool
+  , oJoinTests                :: !Bool
+  , oJoinAmems                :: !Bool
+  , oJoinNearestAncestors     :: !Bool
 
-  , optsNegativeTests            :: !Bool
-  , optsNegativeAmems            :: !Bool
-  , optsNegativeNearestAncestors :: !Bool
-  , optsNegativeToks             :: !Bool
+  , oNegativeTests            :: !Bool
+  , oNegativeAmems            :: !Bool
+  , oNegativeNearestAncestors :: !Bool
+  , oNegativeToks             :: !Bool
 
-  , optsNccConjucts              :: !Bool
-  , optsNccPartners              :: !Bool
-  , optsNccNodes                 :: !Bool
-  , optsNccToks                  :: !Bool
-  , optsNccNewResultBuffers      :: !Bool
+  , oNccConjucts              :: !Bool
+  , oNccPartners              :: !Bool
+  , oNccNodes                 :: !Bool
+  , oNccToks                  :: !Bool
+  , oNccNewResultBuffers      :: !Bool
 
-  , optsPToks                    :: !Bool
-  , optsPLocations               :: !Bool
+  , oPToks                    :: !Bool
+  , oPLocations               :: !Bool
   }
 
 defaultOpts :: Opts
 defaultOpts =
   Opts
-  { optsSymbolIds                = False
+  { oSymbolIds                = False
 
-  , optsWmeIds                   = False
-  , optsWmeSymbolic              = True
-  , optsWmeAmems                 = False
-  , optsWmeToks                  = False
-  , optsWmeNegativeJoinResults   = False
+  , oWmeIds                   = False
+  , oWmeSymbolic              = True
+  , oWmeAmems                 = False
+  , oWmeToks                  = False
+  , oWmeNegativeJoinResults   = False
 
-  , optsTokIds                   = False
-  , optsTokWmes                  = False
-  , optsTokWmesSymbolic          = True
-  , optsTokParents               = False
-  , optsTokNodes                 = False
-  , optsTokChildren              = False
-  , optsTokJoinResults           = False
-  , optsTokNccResults            = False
-  , optsTokOwners                = False
+  , oTokIds                   = False
+  , oTokWmes                  = False
+  , oTokParents               = False
+  , oTokNodes                 = False
+  , oTokChildren              = False
+  , oTokJoinResults           = False
+  , oTokNccResults            = False
+  , oTokOwners                = False
 
-  , optsAmemFields               = True
-  , optsAmemRefcount             = False
-  , optsAmemWmes                 = False
-  , optsAmemWmesSymbolic         = True
+  , oAmemFields               = True
+  , oAmemRefcount             = False
+  , oAmemWmes                 = False
 
-  , optsNodeIds                  = False
-  , optsUl                       = True
+  , oNodeIds                  = False
+  , oUl                       = True
 
-  , optsBmemToks                 = False
+  , oBmemToks                 = False
 
-  , optsJoinTests                = True
-  , optsJoinAmems                = True
-  , optsJoinNearestAncestors     = False
+  , oJoinTests                = True
+  , oJoinAmems                = True
+  , oJoinNearestAncestors     = False
 
-  , optsNegativeTests            = True
-  , optsNegativeAmems            = True
-  , optsNegativeNearestAncestors = False
-  , optsNegativeToks             = False
+  , oNegativeTests            = True
+  , oNegativeAmems            = True
+  , oNegativeNearestAncestors = False
+  , oNegativeToks             = False
 
-  , optsNccConjucts              = False
-  , optsNccPartners              = False
-  , optsNccNodes                 = False
-  , optsNccToks                  = False
-  , optsNccNewResultBuffers      = False
+  , oNccConjucts              = False
+  , oNccPartners              = False
+  , oNccNodes                 = False
+  , oNccToks                  = False
+  , oNccNewResultBuffers      = False
 
-  , optsPToks                    = False
-  , optsPLocations               = False }
-
--- META OPTS.
+  , oPToks                    = False
+  , oPLocations               = False }
 
 type Oswitch = Opts -> Opts
+
+-- META OPTS.
 
 withIds, noIds :: Oswitch
 withIds = withSymbolIds
@@ -311,148 +307,140 @@ noAmems   = noWmeAmems   . noNodeAmems
 -- SPECIFIC OPTS.
 
 withSymbolIds, noSymbolIds :: Oswitch
-withSymbolIds o = o { optsSymbolIds = True  }
-noSymbolIds   o = o { optsSymbolIds = False }
+withSymbolIds o = o { oSymbolIds = True  }
+noSymbolIds   o = o { oSymbolIds = False }
 
 withWmeIds, noWmeIds :: Oswitch
-withWmeIds o = o { optsWmeIds = True  }
-noWmeIds   o = o { optsWmeIds = False }
+withWmeIds o = o { oWmeIds = True  }
+noWmeIds   o = o { oWmeIds = False }
 
 withWmesSymbolic, withWmesExplicit :: Oswitch
-withWmesSymbolic o = o { optsWmeSymbolic = True }
-withWmesExplicit o = o { optsWmeSymbolic = False }
+withWmesSymbolic o = o { oWmeSymbolic = True }
+withWmesExplicit o = o { oWmeSymbolic = False }
 
 withWmeAmems, noWmeAmems :: Oswitch
-withWmeAmems o = o { optsWmeAmems = True  }
-noWmeAmems   o = o { optsWmeAmems = False }
+withWmeAmems o = o { oWmeAmems = True  }
+noWmeAmems   o = o { oWmeAmems = False }
 
 withWmeToks, noWmeToks :: Oswitch
-withWmeToks o = o { optsWmeToks = True  }
-noWmeToks   o = o { optsWmeToks = False }
+withWmeToks o = o { oWmeToks = True  }
+noWmeToks   o = o { oWmeToks = False }
 
 withWmeNegativeJoinResults, noWmeNegativeJoinResults :: Oswitch
-withWmeNegativeJoinResults o = o { optsWmeNegativeJoinResults = True  }
-noWmeNegativeJoinResults   o = o { optsWmeNegativeJoinResults = False }
+withWmeNegativeJoinResults o = o { oWmeNegativeJoinResults = True  }
+noWmeNegativeJoinResults   o = o { oWmeNegativeJoinResults = False }
 
 withTokIds, noTokIds :: Oswitch
-withTokIds o = o { optsTokIds = True  }
-noTokIds   o = o { optsTokIds = False }
+withTokIds o = o { oTokIds = True  }
+noTokIds   o = o { oTokIds = False }
 
 withTokWmes, noTokWmes :: Oswitch
-withTokWmes o = o { optsTokWmes = True  }
-noTokWmes   o = o { optsTokWmes = False }
-
-withTokWmesSymbolic, withTokWmesExplicit :: Oswitch
-withTokWmesSymbolic o = o { optsTokWmesSymbolic = True }
-withTokWmesExplicit o = o { optsTokWmesSymbolic = False }
+withTokWmes o = o { oTokWmes = True  }
+noTokWmes   o = o { oTokWmes = False }
 
 withTokParents, noTokParents :: Oswitch
-withTokParents o = o { optsTokParents = True  }
-noTokParents   o = o { optsTokParents = False }
+withTokParents o = o { oTokParents = True  }
+noTokParents   o = o { oTokParents = False }
 
 withTokNodes, noTokNodes :: Oswitch
-withTokNodes o = o { optsTokNodes = True  }
-noTokNodes   o = o { optsTokNodes = False }
+withTokNodes o = o { oTokNodes = True  }
+noTokNodes   o = o { oTokNodes = False }
 
 withTokChildren, noTokChildren :: Oswitch
-withTokChildren o = o { optsTokChildren = True  }
-noTokChildren   o = o { optsTokChildren = False }
+withTokChildren o = o { oTokChildren = True  }
+noTokChildren   o = o { oTokChildren = False }
 
 withTokJoinResults, noTokJoinResults :: Oswitch
-withTokJoinResults o = o { optsTokJoinResults = True  }
-noTokJoinResults   o = o { optsTokJoinResults = False }
+withTokJoinResults o = o { oTokJoinResults = True  }
+noTokJoinResults   o = o { oTokJoinResults = False }
 
 withTokNccResults, noTokNccResults :: Oswitch
-withTokNccResults o = o { optsTokNccResults = True  }
-noTokNccResults   o = o { optsTokNccResults = False }
+withTokNccResults o = o { oTokNccResults = True  }
+noTokNccResults   o = o { oTokNccResults = False }
 
 withTokOwners, noTokOwners :: Oswitch
-withTokOwners o = o { optsTokOwners = True  }
-noTokOwners   o = o { optsTokOwners = False }
+withTokOwners o = o { oTokOwners = True  }
+noTokOwners   o = o { oTokOwners = False }
 
 withAmemFields, noAmemFields :: Oswitch
-withAmemFields o = o { optsAmemFields = True  }
-noAmemFields   o = o { optsAmemFields = False }
+withAmemFields o = o { oAmemFields = True  }
+noAmemFields   o = o { oAmemFields = False }
 
 withAmemRefcount, noAmemRefcount :: Oswitch
-withAmemRefcount o = o { optsAmemRefcount = True  }
-noAmemRefcount   o = o { optsAmemRefcount = False }
+withAmemRefcount o = o { oAmemRefcount = True  }
+noAmemRefcount   o = o { oAmemRefcount = False }
 
 withAmemWmes, noAmemWmes :: Oswitch
-withAmemWmes o = o { optsAmemWmes = True  }
-noAmemWmes   o = o { optsAmemWmes = False }
-
-withAmemWmesSymbolic, withAmemWmesExplicit :: Oswitch
-withAmemWmesSymbolic o = o { optsAmemWmesSymbolic = True }
-withAmemWmesExplicit o = o { optsAmemWmesSymbolic = False }
+withAmemWmes o = o { oAmemWmes = True  }
+noAmemWmes   o = o { oAmemWmes = False }
 
 withNodeIds, noNodeIds :: Oswitch
-withNodeIds o = o { optsNodeIds = True  }
-noNodeIds   o = o { optsNodeIds = False }
+withNodeIds o = o { oNodeIds = True  }
+noNodeIds   o = o { oNodeIds = False }
 
 withUl, noUl :: Oswitch
-withUl o = o { optsUl = True  }
-noUl   o = o { optsUl = False }
+withUl o = o { oUl = True  }
+noUl   o = o { oUl = False }
 
 withBmemToks, noBmemToks :: Oswitch
-withBmemToks o = o { optsBmemToks = True  }
-noBmemToks   o = o { optsBmemToks = False }
+withBmemToks o = o { oBmemToks = True  }
+noBmemToks   o = o { oBmemToks = False }
 
 withJoinTests, noJoinTests :: Oswitch
-withJoinTests o = o { optsJoinTests = True  }
-noJoinTests   o = o { optsJoinTests = False }
+withJoinTests o = o { oJoinTests = True  }
+noJoinTests   o = o { oJoinTests = False }
 
 withJoinAmems, noJoinAmems :: Oswitch
-withJoinAmems o = o { optsJoinAmems = True  }
-noJoinAmems   o = o { optsJoinAmems = False }
+withJoinAmems o = o { oJoinAmems = True  }
+noJoinAmems   o = o { oJoinAmems = False }
 
 withJoinNearestAncestors, noJoinNearestAncestors :: Oswitch
-withJoinNearestAncestors o = o { optsJoinNearestAncestors = True  }
-noJoinNearestAncestors   o = o { optsJoinNearestAncestors = False }
+withJoinNearestAncestors o = o { oJoinNearestAncestors = True  }
+noJoinNearestAncestors   o = o { oJoinNearestAncestors = False }
 
 withNegativeTests, noNegativeTests :: Oswitch
-withNegativeTests o = o { optsNegativeTests = True  }
-noNegativeTests   o = o { optsNegativeTests = False }
+withNegativeTests o = o { oNegativeTests = True  }
+noNegativeTests   o = o { oNegativeTests = False }
 
 withNegativeAmems, noNegativeAmems :: Oswitch
-withNegativeAmems o = o { optsNegativeAmems = True  }
-noNegativeAmems   o = o { optsNegativeAmems = False }
+withNegativeAmems o = o { oNegativeAmems = True  }
+noNegativeAmems   o = o { oNegativeAmems = False }
 
 withNegativeNearestAncestors, noNegativeNearestAncestors :: Oswitch
-withNegativeNearestAncestors o = o { optsNegativeNearestAncestors = True  }
-noNegativeNearestAncestors   o = o { optsNegativeNearestAncestors = False }
+withNegativeNearestAncestors o = o { oNegativeNearestAncestors = True  }
+noNegativeNearestAncestors   o = o { oNegativeNearestAncestors = False }
 
 withNegativeToks, noNegativeToks :: Oswitch
-withNegativeToks o = o { optsNegativeToks = True  }
-noNegativeToks   o = o { optsNegativeToks = False }
+withNegativeToks o = o { oNegativeToks = True  }
+noNegativeToks   o = o { oNegativeToks = False }
 
 withNccConjucts, noNccConjucts :: Oswitch
-withNccConjucts o = o { optsNccConjucts = True  }
-noNccConjucts   o = o { optsNccConjucts = False }
+withNccConjucts o = o { oNccConjucts = True  }
+noNccConjucts   o = o { oNccConjucts = False }
 
 withNccPartners, noNccPartners :: Oswitch
-withNccPartners o = o { optsNccPartners = True  }
-noNccPartners   o = o { optsNccPartners = False }
+withNccPartners o = o { oNccPartners = True  }
+noNccPartners   o = o { oNccPartners = False }
 
 withNccNodes, noNccNodes :: Oswitch
-withNccNodes o = o { optsNccNodes = True  }
-noNccNodes   o = o { optsNccNodes = False }
+withNccNodes o = o { oNccNodes = True  }
+noNccNodes   o = o { oNccNodes = False }
 
 withNccToks, noNccToks :: Oswitch
-withNccToks o = o { optsNccToks = True  }
-noNccToks   o = o { optsNccToks = False }
+withNccToks o = o { oNccToks = True  }
+noNccToks   o = o { oNccToks = False }
 
 withNccNewResultBuffers, noNccNewResultBuffers :: Oswitch
-withNccNewResultBuffers o = o { optsNccNewResultBuffers = True  }
-noNccNewResultBuffers   o = o { optsNccNewResultBuffers = False }
+withNccNewResultBuffers o = o { oNccNewResultBuffers = True  }
+noNccNewResultBuffers   o = o { oNccNewResultBuffers = False }
 
 withPToks, noPToks :: Oswitch
-withPToks o = o { optsPToks = True  }
-noPToks   o = o { optsPToks = False }
+withPToks o = o { oPToks = True  }
+noPToks   o = o { oPToks = False }
 
 withPLocations, noPLocations :: Oswitch
-withPLocations o = o { optsPLocations = True  }
-noPLocations   o = o { optsPLocations = False }
+withPLocations o = o { oPLocations = True  }
+noPLocations   o = o { oPLocations = False }
 
 -- WMES VISUALIZATION
 
@@ -465,12 +453,12 @@ instance ToVn Wme where
 
 showWme :: Wme -> Opts -> STM ShowS
 showWme
-  Wme  { wmeId           = id'
-       , wmeObj          = obj
-       , wmeAttr         = attr
-       , wmeVal          = val }
-  Opts { optsWmeSymbolic = osymbolic
-       , optsWmeIds      = owmeIds } =
+  Wme  { wmeId        = id'
+       , wmeObj       = obj
+       , wmeAttr      = attr
+       , wmeVal       = val }
+  Opts { oWmeSymbolic = osymbolic
+       , oWmeIds      = owmeIds } =
     if osymbolic
       then return $ compose [wS, showString (show id')]
       else do
@@ -485,28 +473,29 @@ adjsWmeU = adjsWmeD
 
 adjsWmeD :: Wme -> Opts -> STM [Vn]
 adjsWmeD
-  Wme  { wmeAmems                   = amems
-       , wmeTokens                  = toks
-       , wmeNegJoinResults          = njrs}
-  Opts { optsWmeAmems               = oamems
-       , optsWmeToks                = otoks
-       , optsWmeNegativeJoinResults = onjrs} = do
+  Wme  { wmeAmems                = amems
+       , wmeTokens               = toks
+       , wmeNegJoinResults       = njrs}
+  Opts { oWmeAmems               = oamems
+       , oWmeToks                = otoks
+       , oWmeNegativeJoinResults = onjrs} = do
 
-    amemVn <- optLeafPropVn oamems "amems"            (readTVar amems)
-    toksVn <- optLeafPropVn otoks  "toks"             (readTVar toks)
-    njrsVn <- optLeafPropVn onjrs  "neg-join-results" (readTVar njrs)
+    amemVn <- optLeafPropVn oamems "α mems" (readTVar amems)
+    toksVn <- optLeafPropVn otoks  "toks"   (readTVar toks)
+    njrsVn <- optLeafPropVn onjrs "neg. ⊳⊲ (owners)"
+              -- When visualizing the negative join results we only
+              -- show the owner tokens, cause wme in every negative join
+              -- result is this wme.
+              (mapMM (return . negativeJoinResultOwner)
+                     (toListM (readTVar njrs)))
+
     optVns [amemVn, toksVn, njrsVn]
+
 {-# INLINABLE adjsWmeD #-}
 
 -- TOKENS VISUALIZATION
 
 instance ToVn Token where
-  toVn     _ = undefined
-  toShowVn _ = undefined
-
--- NEGATIVE JOIN RESULTS
-
-instance ToVn NegativeJoinResult where
   toVn     _ = undefined
   toShowVn _ = undefined
 
@@ -531,3 +520,10 @@ rparenS = showString ")"
 
 dashS :: ShowS
 dashS = showString "-"
+
+joinS :: ShowS
+joinS = showString "⊳⊲"
+
+alphaS, betaS :: ShowS
+alphaS = showString "α"
+betaS  = showString "β"

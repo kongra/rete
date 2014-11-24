@@ -19,15 +19,16 @@
 ------------------------------------------------------------------------
 module AI.Rete.Print where
 
-import AI.Rete.Algo (getId)
+import AI.Rete.Algo
 import AI.Rete.Data
 import Control.Concurrent.STM
 import Control.Monad (liftM)
 import Data.Foldable (Foldable)
+import Data.List (intersperse)
 import Data.Maybe (catMaybes)
 import Data.Tree.Print
 import Kask.Control.Monad (toListM, mapMM)
-import Kask.Data.Function (compose)
+import Kask.Data.Function (compose, rcompose)
 
 -- WHAT TO VISUALIZE (type s)
 -- wmes
@@ -96,12 +97,17 @@ showS = showString . show
 {-# INLINE showS #-}
 
 idS :: ID -> ShowS
-idS id' = compose [dashS, showS id']
+idS id' = compose [showS "-", showS id']
 {-# INLINE idS #-}
 
 withIdS :: ShowS -> ID -> ShowS
 withIdS s id' = compose [s, idS id']
 {-# INLINE withIdS #-}
+
+withOptIdS :: Bool -> ShowS -> ID -> ShowS
+withOptIdS False s _   = s
+withOptIdS True  s id' = s `withIdS` id'
+{-# INLINE withOptIdS #-}
 
 toShowVnsM :: (Monad m, Foldable f, ToVn a) => m (f a) -> m [ShowVn]
 toShowVnsM = liftM (map toShowVn) . toListM
@@ -123,7 +129,6 @@ optLeafPropVn True label xs = do
 optVns :: Monad m => [Maybe Vn] -> m [Vn]
 optVns = return . catMaybes
 {-# INLINE optVns #-}
-
 
 -- CONFIGURATIONS FOR TRAVERSING UP/DOWN
 
@@ -182,6 +187,7 @@ data Opts =
 
   , oTokIds                   :: !Bool
   , oTokWmes                  :: !Bool
+  , oTokWmesSymbolic          :: !Bool
   , oTokParents               :: !Bool
   , oTokNodes                 :: !Bool
   , oTokChildren              :: !Bool
@@ -192,6 +198,7 @@ data Opts =
   , oAmemFields               :: !Bool
   , oAmemRefcount             :: !Bool
   , oAmemWmes                 :: !Bool
+  , oAmemWmesSymbolic         :: !Bool
 
   , oNodeIds                  :: !Bool
   , oUl                       :: !Bool
@@ -230,6 +237,7 @@ defaultOpts =
 
   , oTokIds                   = False
   , oTokWmes                  = False
+  , oTokWmesSymbolic          = True
   , oTokParents               = False
   , oTokNodes                 = False
   , oTokChildren              = False
@@ -240,6 +248,7 @@ defaultOpts =
   , oAmemFields               = True
   , oAmemRefcount             = False
   , oAmemWmes                 = False
+  , oAmemWmesSymbolic         = True
 
   , oNodeIds                  = False
   , oUl                       = True
@@ -304,6 +313,14 @@ withAmems, noAmems :: Oswitch
 withAmems = withWmeAmems . withNodeAmems
 noAmems   = noWmeAmems   . noNodeAmems
 
+withAllWmesSymbolic, withAllWmesExplicit :: Oswitch
+withAllWmesSymbolic = withWmesSymbolic
+                    . withTokWmesSymbolic
+                    . withAmemWmesSymbolic
+withAllWmesExplicit = withWmesExplicit
+                    . withTokWmesExplicit
+                    . withAmemWmesExplicit
+
 -- SPECIFIC OPTS.
 
 withSymbolIds, noSymbolIds :: Oswitch
@@ -337,6 +354,10 @@ noTokIds   o = o { oTokIds = False }
 withTokWmes, noTokWmes :: Oswitch
 withTokWmes o = o { oTokWmes = True  }
 noTokWmes   o = o { oTokWmes = False }
+
+withTokWmesSymbolic, withTokWmesExplicit :: Oswitch
+withTokWmesSymbolic o = o { oTokWmesSymbolic = True }
+withTokWmesExplicit o = o { oTokWmesSymbolic = False }
 
 withTokParents, noTokParents :: Oswitch
 withTokParents o = o { oTokParents = True  }
@@ -373,6 +394,10 @@ noAmemRefcount   o = o { oAmemRefcount = False }
 withAmemWmes, noAmemWmes :: Oswitch
 withAmemWmes o = o { oAmemWmes = True  }
 noAmemWmes   o = o { oAmemWmes = False }
+
+withAmemWmesSymbolic, withAmemWmesExplicit :: Oswitch
+withAmemWmesSymbolic o = o { oAmemWmesSymbolic = True }
+withAmemWmesExplicit o = o { oAmemWmesSymbolic = False }
 
 withNodeIds, noNodeIds :: Oswitch
 withNodeIds o = o { oNodeIds = True  }
@@ -452,21 +477,29 @@ instance ToVn Wme where
   toShowVn = showWme
 
 showWme :: Wme -> Opts -> STM ShowS
-showWme
-  Wme  { wmeId        = id'
-       , wmeObj       = obj
-       , wmeAttr      = attr
-       , wmeVal       = val }
-  Opts { oWmeSymbolic = osymbolic
-       , oWmeIds      = owmeIds } =
-    if osymbolic
-      then return $ compose [wS, showString (show id')]
-      else do
-        let s = compose [lparenS
-                        , showS obj, commaS
-                        , showS attr, commaS
-                        , showS val, rparenS]
-        return $ if owmeIds then s `withIdS` id' else s
+showWme wme Opts { oWmeSymbolic = osymbolic, oWmeIds = oids } =
+  if osymbolic
+    then return (showWmeSymbolic wme)
+    else return (showWmeExplicit oids wme)
+{-# INLINE showWme #-}
+
+showWmeSymbolic :: Wme -> ShowS
+showWmeSymbolic wme = compose [showS "w", showS $ wmeId wme]
+{-# INLINE showWmeSymbolic #-}
+
+showWmeExplicit :: Bool -> Wme -> ShowS
+showWmeExplicit withId
+  Wme { wmeId = id', wmeObj = obj, wmeAttr = attr, wmeVal = val } =
+    withOptIdS withId
+      (compose [ showS "(", showS obj,  showS ","
+               , showS attr, showS ",", showS val, showS ")"])
+      id'
+{-# INLINE showWmeExplicit #-}
+
+showWmeMaybe :: (Wme -> ShowS) -> Maybe Wme -> ShowS
+showWmeMaybe _ Nothing    = showS "_"
+showWmeMaybe f (Just wme) = f wme
+{-# INLINE showWmeMaybe #-}
 
 adjsWmeU :: Wme -> Opts -> STM [Vn]
 adjsWmeU = adjsWmeD
@@ -482,12 +515,11 @@ adjsWmeD
 
     amemVn <- optLeafPropVn oamems "α mems" (readTVar amems)
     toksVn <- optLeafPropVn otoks  "toks"   (readTVar toks)
-    njrsVn <- optLeafPropVn onjrs "neg. ⊳⊲ (owners)"
+    njrsVn <- optLeafPropVn onjrs  "neg. ⊳⊲ results (owners)"
               -- When visualizing the negative join results we only
               -- show the owner tokens, cause wme in every negative join
               -- result is this wme.
-              (mapMM (return . negativeJoinResultOwner)
-                     (toListM (readTVar njrs)))
+              (mapMM (return . negativeJoinResultOwner) (toListT njrs))
 
     optVns [amemVn, toksVn, njrsVn]
 
@@ -496,34 +528,78 @@ adjsWmeD
 -- TOKENS VISUALIZATION
 
 instance ToVn Token where
-  toVn     _ = undefined
-  toShowVn _ = undefined
+  toVn wme = Vn { vnShowM = showTok  wme
+                , vnAdjsU = adjsTokU wme
+                , vnAdjsD = adjsTokD wme }
+
+  toShowVn = showTok
+
+showTok :: Token -> Opts -> STM ShowS
+showTok
+  DummyTopToken {}
+  Opts { oTokIds = oids } = return (withOptIdS oids (showS "⟨⟩") (-1))
+
+showTok
+  tok
+  Opts { oWmeIds          = owmeids
+       , oTokIds          = oids
+       , oTokWmes         = owmes
+       , oTokWmesSymbolic = osymbolic } = do
+    let s = if owmes
+              then (if osymbolic
+                    then showTokWmesSymbolic tok
+                    else showTokWmesExplicit owmeids tok)
+              else showS "⟨..⟩"
+    return (withOptIdS oids s (tokId tok))
+{-# INLINABLE showTok #-}
+
+showTokWmesSymbolic :: Token -> ShowS
+showTokWmesSymbolic = showTokWmes showWmeSymbolic
+{-# INLINE showTokWmesSymbolic #-}
+
+showTokWmesExplicit :: Bool -> Token -> ShowS
+showTokWmesExplicit owmeids = showTokWmes (showWmeExplicit owmeids)
+{-# INLINE showTokWmesExplicit #-}
+
+showTokWmes :: (Wme -> ShowS) -> Token -> ShowS
+showTokWmes f = rcompose
+              . intersperse (showS ",")
+              . map (showWmeMaybe f)
+              . tokWmes
+{-# INLINE showTokWmes #-}
+
+-- oTokParents
+-- oTokNodes
+-- oTokChildren
+-- oTokJoinResults
+-- oTokNccResults
+-- oTokOwners
+
+-- showWme
+--   Wme  { wmeId        = id'
+--        , wmeObj       = obj
+--        , wmeAttr      = attr
+--        , wmeVal       = val }
+--   Opts { oWmeSymbolic = osymbolic
+--        , oWmeIds      = owmeIds } =
+--     if osymbolic
+--       then return $ compose [wS, showString (show id')]
+--       else do
+--         let s = compose [lparenS
+--                         , showS obj, commaS
+--                         , showS attr, commaS
+--                         , showS val, rparenS]
+--         return $ if owmeIds then s `withIdS` id' else s
+
+adjsTokU :: Token -> Opts -> STM [Vn]
+adjsTokU = adjsTokD
+
+adjsTokD :: Token -> Opts -> STM [Vn]
+adjsTokD tok opts' = undefined
+
 
 -- AMEMS VISUALIZATION
 
 instance ToVn Amem where
   toVn     _ = undefined
   toShowVn _ = undefined
-
--- STRING CONSTANTS
-
-commaS, commspcS :: ShowS
-commaS   = showString ","
-commspcS = showString ", "
-
-wS :: ShowS
-wS = showString "w"
-
-lparenS, rparenS :: ShowS
-lparenS = showString "("
-rparenS = showString ")"
-
-dashS :: ShowS
-dashS = showString "-"
-
-joinS :: ShowS
-joinS = showString "⊳⊲"
-
-alphaS, betaS :: ShowS
-alphaS = showString "α"
-betaS  = showString "β"

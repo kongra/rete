@@ -38,6 +38,7 @@ module AI.Rete.Algo
     , toListT
     , fieldValue
     , getId
+    , tokWmes
 
       -- * (Internal) 'Symbol' stuff
     , wildcardSymbol
@@ -476,9 +477,9 @@ makeAndInsertToken env tok wme node = do
 -- | Returns a sequence of wmes within the token. Every wme wrapped in
 -- a Maybe instance due to the fact that some tokens do not carry on
 -- any wme.
-tokenWmes :: Token -> [Maybe Wme]
-tokenWmes = map tokWme . tokWithAncestors
-{-# INLINE tokenWmes #-}
+tokWmes :: Token -> [Maybe Wme]
+tokWmes = map tokWme . tokWithAncestors
+{-# INLINE tokWmes #-}
 
 -- | Returns the parent of the token. Stays aware of the Dummy Top Token.
 safeTokParent :: Token -> Maybe Token
@@ -557,7 +558,7 @@ passJoinTest tok wme test = value1 == value2
     value1    = fieldValue (joinTestField1 test) wme
     -- We feel safe to coerce to Just wme2 below because of the way
     -- the tests are constructed.
-    Just wme2 = tokenWmes tok !! joinTestDistance test
+    Just wme2 = tokWmes tok !! joinTestDistance test
     value2    = fieldValue (joinTestField2 test) wme2
 {-# INLINABLE passJoinTest #-}
 
@@ -576,7 +577,7 @@ matchingAmemWmes :: [JoinTest] -> Token -> Amem -> STM [Wme]
 matchingAmemWmes [] _ amem = toListT (amemWmes amem)
 matchingAmemWmes tests tok amem = do
   -- When at least one test specified ...
-  let wmes     = tokenWmes tok
+  let wmes     = tokWmes tok
       (s:sets) = map (amemWmesForTest wmes amem) tests
   toListM (foldr (liftM2 Set.intersection) s sets)
 {-# INLINABLE matchingAmemWmes #-}
@@ -803,7 +804,7 @@ leftActivatePNode env tok wme node  = do
 
   -- Fire the proper action.
   let action = vprop pnodeAction node
-  action (Actx env node newTok (tokenWmes newTok))
+  action (Actx env node newTok (tokWmes newTok))
 {-# INLINABLE leftActivatePNode #-}
 
 -- LINKING/UNLINKING
@@ -1054,7 +1055,7 @@ deleteTokenAndDescendents env removeFromParent removeFromWme tok = do
       -- proper action.
       case vprop pnodeRevokeAction node of
         Nothing     -> return ()
-        Just action -> action (Actx env node tok (tokenWmes tok))
+        Just action -> action (Actx env node tok (tokWmes tok))
 
     DTN      {} -> error "Deleting token(s) from Dummy Top Node is evil."
     JoinNode {} -> error "Can't happen."

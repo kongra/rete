@@ -188,12 +188,12 @@ data Opts =
   , oTokIds                   :: !Bool
   , oTokWmes                  :: !Bool
   , oTokWmesSymbolic          :: !Bool
-  , oTokParents               :: !Bool
-  , oTokNodes                 :: !Bool
+  , oTokParent                :: !Bool
+  , oTokNode                  :: !Bool
   , oTokChildren              :: !Bool
   , oTokJoinResults           :: !Bool
   , oTokNccResults            :: !Bool
-  , oTokOwners                :: !Bool
+  , oTokOwner                 :: !Bool
 
   , oAmemFields               :: !Bool
   , oAmemRefcount             :: !Bool
@@ -230,23 +230,23 @@ defaultOpts =
   { oSymbolIds                = False
 
   , oWmeIds                   = False
-  , oWmeSymbolic              = True
+  , oWmeSymbolic              = False
   , oWmeAmems                 = False
   , oWmeToks                  = False
   , oWmeNegativeJoinResults   = False
 
   , oTokIds                   = False
-  , oTokWmes                  = False
+  , oTokWmes                  = True
   , oTokWmesSymbolic          = True
-  , oTokParents               = False
-  , oTokNodes                 = False
+  , oTokParent                = False
+  , oTokNode                  = False
   , oTokChildren              = False
   , oTokJoinResults           = False
   , oTokNccResults            = False
-  , oTokOwners                = False
+  , oTokOwner                 = False
 
   , oAmemFields               = True
-  , oAmemRefcount             = False
+  , oAmemRefcount             = True
   , oAmemWmes                 = False
   , oAmemWmesSymbolic         = True
 
@@ -359,13 +359,13 @@ withTokWmesSymbolic, withTokWmesExplicit :: Oswitch
 withTokWmesSymbolic o = o { oTokWmesSymbolic = True }
 withTokWmesExplicit o = o { oTokWmesSymbolic = False }
 
-withTokParents, noTokParents :: Oswitch
-withTokParents o = o { oTokParents = True  }
-noTokParents   o = o { oTokParents = False }
+withTokParent, noTokParent :: Oswitch
+withTokParent o = o { oTokParent = True  }
+noTokParent   o = o { oTokParent = False }
 
-withTokNodes, noTokNodes :: Oswitch
-withTokNodes o = o { oTokNodes = True  }
-noTokNodes   o = o { oTokNodes = False }
+withTokNode, noTokNode :: Oswitch
+withTokNode o = o { oTokNode = True  }
+noTokNode   o = o { oTokNode = False }
 
 withTokChildren, noTokChildren :: Oswitch
 withTokChildren o = o { oTokChildren = True  }
@@ -379,9 +379,9 @@ withTokNccResults, noTokNccResults :: Oswitch
 withTokNccResults o = o { oTokNccResults = True  }
 noTokNccResults   o = o { oTokNccResults = False }
 
-withTokOwners, noTokOwners :: Oswitch
-withTokOwners o = o { oTokOwners = True  }
-noTokOwners   o = o { oTokOwners = False }
+withTokOwner, noTokOwner :: Oswitch
+withTokOwner o = o { oTokOwner = True  }
+noTokOwner   o = o { oTokOwner = False }
 
 withAmemFields, noAmemFields :: Oswitch
 withAmemFields o = o { oAmemFields = True  }
@@ -488,9 +488,9 @@ showWmeSymbolic wme = compose [showS "w", showS $ wmeId wme]
 {-# INLINE showWmeSymbolic #-}
 
 showWmeExplicit :: Bool -> Wme -> ShowS
-showWmeExplicit withId
+showWmeExplicit oid
   Wme { wmeId = id', wmeObj = obj, wmeAttr = attr, wmeVal = val } =
-    withOptIdS withId
+    withOptIdS oid
       (compose [ showS "(", showS obj,  showS ","
                , showS attr, showS ",", showS val, showS ")"])
       id'
@@ -508,21 +508,20 @@ adjsWmeD :: Wme -> Opts -> STM [Vn]
 adjsWmeD
   Wme  { wmeAmems                = amems
        , wmeTokens               = toks
-       , wmeNegJoinResults       = njrs}
+       , wmeNegJoinResults       = jresults}
   Opts { oWmeAmems               = oamems
        , oWmeToks                = otoks
-       , oWmeNegativeJoinResults = onjrs} = do
+       , oWmeNegativeJoinResults = ojresults} = do
 
-    amemVn <- optLeafPropVn oamems "α mems" (readTVar amems)
-    toksVn <- optLeafPropVn otoks  "toks"   (readTVar toks)
-    njrsVn <- optLeafPropVn onjrs  "neg. ⊳⊲ results (owners)"
+    amemVn <- optLeafPropVn oamems    "α mems" (readTVar amems)
+    toksVn <- optLeafPropVn otoks     "toks"   (readTVar toks)
+    njrsVn <- optLeafPropVn ojresults "neg. ⊳⊲ results (owners)"
               -- When visualizing the negative join results we only
               -- show the owner tokens, cause wme in every negative join
               -- result is this wme.
-              (mapMM (return . negativeJoinResultOwner) (toListT njrs))
+              (mapMM (return . negativeJoinResultOwner) (toListT jresults))
 
     optVns [amemVn, toksVn, njrsVn]
-
 {-# INLINABLE adjsWmeD #-}
 
 -- TOKENS VISUALIZATION
@@ -568,38 +567,56 @@ showTokWmes f = rcompose
               . tokWmes
 {-# INLINE showTokWmes #-}
 
--- oTokParents
--- oTokNodes
--- oTokChildren
--- oTokJoinResults
--- oTokNccResults
--- oTokOwners
-
--- showWme
---   Wme  { wmeId        = id'
---        , wmeObj       = obj
---        , wmeAttr      = attr
---        , wmeVal       = val }
---   Opts { oWmeSymbolic = osymbolic
---        , oWmeIds      = owmeIds } =
---     if osymbolic
---       then return $ compose [wS, showString (show id')]
---       else do
---         let s = compose [lparenS
---                         , showS obj, commaS
---                         , showS attr, commaS
---                         , showS val, rparenS]
---         return $ if owmeIds then s `withIdS` id' else s
-
 adjsTokU :: Token -> Opts -> STM [Vn]
 adjsTokU = adjsTokD
 
 adjsTokD :: Token -> Opts -> STM [Vn]
-adjsTokD tok opts' = undefined
+adjsTokD
+  DummyTopToken { tokNode  = node,  tokChildren  = children  }
+  Opts          { oTokNode = onode, oTokChildren = ochildren } = do
+    nodeVn     <- optLeafPropVn onode     "node"     (return [node])
+    childrenVn <- optLeafPropVn ochildren "children" (readTVar children)
+    optVns [nodeVn, childrenVn]
 
+adjsTokD
+  Token { tokParent         = parent
+        , tokOwner          = mowner
+        , tokNode           = node
+        , tokChildren       = children
+        , tokNegJoinResults = jresults
+        , tokNccResults     = nresults }
+  Opts  { oTokParent        = oparent
+        , oTokOwner         = oowner
+        , oTokNode          = onode
+        , oTokChildren      = ochildren
+        , oTokJoinResults   = ojresults -- map to wme
+        , oTokNccResults    = onresults } = do
+
+    parentVn <- optLeafPropVn oparent "parent" (return [parent])
+    ownerVn  <- optLeafPropVn oowner  "owner"  (liftM owner (readTVar mowner))
+    nodeVn   <- optLeafPropVn onode   "node"   (return [node])
+
+    childrenVn <- optLeafPropVn ochildren "children" (readTVar children)
+    jresultsVn <- optLeafPropVn ojresults "neg. ⊳⊲ results (wmes)"
+                  -- When visualizing the negative join results we only
+                  -- show the wmes, cause owner in every negative join
+                  -- result is this tok(en).
+                  (mapMM (return . negativeJoinResultWme) (toListT jresults))
+    nresultsVn <- optLeafPropVn onresults "ncc results" (readTVar nresults)
+    optVns [parentVn, ownerVn, nodeVn, childrenVn, jresultsVn, nresultsVn]
+    where
+      owner ow = case ow of
+        Nothing -> []
+        Just o  -> [o]
 
 -- AMEMS VISUALIZATION
 
 instance ToVn Amem where
+  toVn     _ = undefined
+  toShowVn _ = undefined
+
+-- NODE VISUALIZATION
+
+instance ToVn Node where
   toVn     _ = undefined
   toShowVn _ = undefined

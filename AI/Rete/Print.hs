@@ -1,5 +1,6 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE FlexibleContexts #-}
 #if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 702
 {-# LANGUAGE Trustworthy #-}
@@ -30,28 +31,19 @@ import Data.Tree.Print
 import Kask.Control.Monad (toListM, mapMM)
 import Kask.Data.Function (compose, rcompose)
 
--- WHAT WE ACTUALLY NEED FOR s
--- tree+, tree- - THE API
--- tree+Impl, tree-Impl - IMPLEMENTATIONS
-
--- Vn CONSTRUCTION (ABSTRACTION)
+-- Vns (VISUALIZATION NODEs)
 
 class ToVn a where
   toAdjsVn :: a -> AdjsVn
   toShowVn :: a -> ShowVn
 
 toVn :: ToVn a => a -> Vn
-toVn x = Vn { vnShowM = toShowVn x
-            , vnAdjs  = toAdjsVn x }
+toVn x = Vn { vnShowM = toShowVn x , vnAdjs  = toAdjsVn x }
 {-# INLINE toVn #-}
-
--- VIS.-TREE NODES
 
 type ShowVn = Opts -> STM ShowS
 type AdjsVn = Opts -> STM [Vn]
 
--- | A Visible Node (hence Vn), the basic data structure for the tree
--- visualization process, compatible with the treeprint API.
 data Vn =
   Vn { vnShowM :: !ShowVn
      , vnAdjs  :: !AdjsVn}
@@ -95,15 +87,27 @@ withOptIdS False s _   = s
 withOptIdS True  s id' = s `withIdS` id'
 {-# INLINE withOptIdS #-}
 
+toVnsM :: (Monad m, Foldable f, ToVn a) => m (f a) -> m [Vn]
+toVnsM = liftM (map toVn) . toListM
+{-# INLINE toVnsM #-}
+
 toShowVnsM :: (Monad m, Foldable f, ToVn a) => m (f a) -> m [ShowVn]
 toShowVnsM = liftM (map toShowVn) . toListM
 {-# INLINE toShowVnsM #-}
 
-optLeafPropVn :: (Monad m, Foldable f, ToVn a) =>
-                 Bool
-              -> String
-              -> m (f a)
-              -> m (Maybe Vn)
+type OptPropVn = (Monad m, Foldable f, ToVn a) =>
+                 Bool -> String -> m (f a) -> m (Maybe Vn)
+
+optPropVn :: OptPropVn
+optPropVn False _    _  = return Nothing
+optPropVn True label xs = do
+  vns <- toVnsM xs
+  if null vns
+     then return Nothing
+     else return (Just (propVn (showString label) vns))
+{-# INLINABLE optPropVn #-}
+
+optLeafPropVn :: OptPropVn
 optLeafPropVn False _    _  = return Nothing
 optLeafPropVn True label xs = do
   shows' <- toShowVnsM xs
@@ -116,7 +120,15 @@ optVns :: Monad m => [Maybe Vn] -> m [Vn]
 optVns = return . catMaybes
 {-# INLINE optVns #-}
 
--- CONFIGURATION FOR TRAVERSING UP/DOWN
+netPropVn :: Opts -> OptPropVn
+netPropVn Opts { oDataMode = dm } = if dm then optLeafPropVn else optPropVn
+{-# INLINE netPropVn #-}
+
+dataPropVn :: Opts -> OptPropVn
+dataPropVn Opts { oDataMode = dm } = if dm then optPropVn else optLeafPropVn
+{-# INLINE dataPropVn #-}
+
+-- CONFIGURATION
 
 type VConf = Conf STM ShowS Opts Vn
 
@@ -154,8 +166,8 @@ stmImpl = str
 
 data Opts =
   Opts
-  {
-    oSymbolIds                :: !Bool
+  { oDataMode                 :: !Bool
+  , oSymbolIds                :: !Bool
 
   , oWmeIds                   :: !Bool
   , oWmeSymbolic              :: !Bool
@@ -179,9 +191,13 @@ data Opts =
   , oAmemSuccessors           :: !Bool
 
   , oNodeIds                  :: !Bool
+  , oNodeParent               :: !Bool
+  , oNodeChildren             :: !Bool
+
   , oUl                       :: !Bool
 
   , oBmemToks                 :: !Bool
+  , oBmemAllChildren          :: !Bool
 
   , oJoinTests                :: !Bool
   , oJoinAmems                :: !Bool
@@ -205,7 +221,8 @@ data Opts =
 defaultOpts :: Opts
 defaultOpts =
   Opts
-  { oSymbolIds                = False
+  { oDataMode                 = False
+  , oSymbolIds                = False
 
   , oWmeIds                   = False
   , oWmeSymbolic              = False
@@ -214,8 +231,8 @@ defaultOpts =
   , oWmeNegativeJoinResults   = False
 
   , oTokIds                   = False
-  , oTokWmes                  = True
-  , oTokWmesSymbolic          = True
+  , oTokWmes                  = False
+  , oTokWmesSymbolic          = False
   , oTokParent                = False
   , oTokNode                  = False
   , oTokChildren              = False
@@ -223,22 +240,25 @@ defaultOpts =
   , oTokNccResults            = False
   , oTokOwner                 = False
 
-  , oAmemFields               = True
+  , oAmemFields               = False
   , oAmemRefcount             = False
   , oAmemWmes                 = False
   , oAmemSuccessors           = False
 
   , oNodeIds                  = False
-  , oUl                       = True
+  , oNodeParent               = False
+  , oNodeChildren             = False
+  , oUl                       = False
 
   , oBmemToks                 = False
+  , oBmemAllChildren          = False
 
-  , oJoinTests                = True
-  , oJoinAmems                = True
+  , oJoinTests                = False
+  , oJoinAmems                = False
   , oJoinNearestAncestors     = False
 
-  , oNegativeTests            = True
-  , oNegativeAmems            = True
+  , oNegativeTests            = False
+  , oNegativeAmems            = False
   , oNegativeNearestAncestors = False
   , oNegativeToks             = False
 
@@ -298,6 +318,10 @@ withAllWmesExplicit = withWmesExplicit
                     . withTokWmesExplicit
 
 -- SPECIFIC OPTS.
+
+inDataMode, inNetMode :: Oswitch
+inDataMode o = o { oDataMode = True  }
+inNetMode  o = o { oDataMode = False }
 
 withSymbolIds, noSymbolIds :: Oswitch
 withSymbolIds o = o { oSymbolIds = True  }
@@ -386,6 +410,10 @@ noUl   o = o { oUl = False }
 withBmemToks, noBmemToks :: Oswitch
 withBmemToks o = o { oBmemToks = True  }
 noBmemToks   o = o { oBmemToks = False }
+
+withBmemAllChildren, noBmemAllChildren :: Oswitch
+withBmemAllChildren o = o { oBmemAllChildren = True  }
+noBmemAllChildren   o = o { oBmemAllChildren = False }
 
 withJoinTests, noJoinTests :: Oswitch
 withJoinTests o = o { oJoinTests = True  }
@@ -476,16 +504,16 @@ showWmeMaybe f (Just wme) = f wme
 
 adjsWme :: Wme -> Opts -> STM [Vn]
 adjsWme
-  Wme  { wmeAmems                = amems
-       , wmeTokens               = toks
-       , wmeNegJoinResults       = jresults}
-  Opts { oWmeAmems               = oamems
-       , oWmeToks                = otoks
-       , oWmeNegativeJoinResults = ojresults} = do
+  Wme        { wmeAmems                = amems
+             , wmeTokens               = toks
+             , wmeNegJoinResults       = jresults}
+  opts'@Opts { oWmeAmems               = oamems
+             , oWmeToks                = otoks
+             , oWmeNegativeJoinResults = ojresults} = do
 
-    amemVn <- optLeafPropVn oamems    "α mems" (readTVar amems)
-    toksVn <- optLeafPropVn otoks     "toks"   (readTVar toks)
-    njrsVn <- optLeafPropVn ojresults "neg. ⊳⊲ results (owners)"
+    amemVn <- netPropVn  opts' oamems    "α mems" (readTVar amems)
+    toksVn <- dataPropVn opts' otoks     "toks"   (readTVar toks)
+    njrsVn <- dataPropVn opts' ojresults "neg. ⊳⊲ results (owners)"
               -- When visualizing the negative join results we only
               -- show the owner tokens, cause wme in every negative join
               -- result is this wme.
@@ -537,36 +565,36 @@ showTokWmes f = rcompose
 adjsTok :: Token -> Opts -> STM [Vn]
 adjsTok
   DummyTopToken { tokNode  = node,  tokChildren  = children  }
-  Opts          { oTokNode = onode, oTokChildren = ochildren } = do
-    nodeVn     <- optLeafPropVn onode     "node"     (return [node])
-    childrenVn <- optLeafPropVn ochildren "children" (readTVar children)
+  opts'@Opts    { oTokNode = onode, oTokChildren = ochildren } = do
+    nodeVn     <- netPropVn  opts' onode     "node"     (return [node])
+    childrenVn <- dataPropVn opts' ochildren "children" (readTVar children)
     optVns [nodeVn, childrenVn]
 
 adjsTok
-  Token { tokParent         = parent
-        , tokOwner          = mowner
-        , tokNode           = node
-        , tokChildren       = children
-        , tokNegJoinResults = jresults
-        , tokNccResults     = nresults }
-  Opts  { oTokParent        = oparent
-        , oTokOwner         = oowner
-        , oTokNode          = onode
-        , oTokChildren      = ochildren
-        , oTokJoinResults   = ojresults -- map to wme
-        , oTokNccResults    = onresults } = do
+  Token       { tokParent         = parent
+              , tokOwner          = mowner
+              , tokNode           = node
+              , tokChildren       = children
+              , tokNegJoinResults = jresults
+              , tokNccResults     = nresults }
+  opts'@Opts  { oTokParent        = oparent
+              , oTokOwner         = oowner
+              , oTokNode          = onode
+              , oTokChildren      = ochildren
+              , oTokJoinResults   = ojresults -- map to wme
+              , oTokNccResults    = onresults } = do
 
-    parentVn <- optLeafPropVn oparent "parent" (return [parent])
-    ownerVn  <- optLeafPropVn oowner  "owner"  (liftM owner (readTVar mowner))
-    nodeVn   <- optLeafPropVn onode   "node"   (return [node])
+    parentVn <- dataPropVn opts' oparent "parent" (return [parent])
+    ownerVn  <- dataPropVn opts' oowner  "owner"  (liftM owner (readTVar mowner))
+    nodeVn   <- netPropVn  opts' onode   "node"   (return [node])
 
-    childrenVn <- optLeafPropVn ochildren "children" (readTVar children)
-    jresultsVn <- optLeafPropVn ojresults "neg. ⊳⊲ results (wmes)"
+    childrenVn <- dataPropVn opts' ochildren "children" (readTVar children)
+    jresultsVn <- dataPropVn opts' ojresults "neg. ⊳⊲ results (wmes)"
                   -- When visualizing the negative join results we only
                   -- show the wmes, cause owner in every negative join
                   -- result is this tok(en).
                   (mapMM (return . negativeJoinResultWme) (toListT jresults))
-    nresultsVn <- optLeafPropVn onresults "ncc results" (readTVar nresults)
+    nresultsVn <- dataPropVn opts' onresults "ncc results" (readTVar nresults)
     optVns [parentVn, ownerVn, nodeVn, childrenVn, jresultsVn, nresultsVn]
     where
       owner ow = case ow of
@@ -606,13 +634,12 @@ showAmem
 
 adjsAmem :: Amem -> Opts -> STM [Vn]
 adjsAmem
-  Amem { amemSuccessors  = succ'
-       , amemWmes        = wmes }
-  Opts { oAmemSuccessors = osucc
-       , oAmemWmes       = owmes } = do
-
-    succVn <- optLeafPropVn osucc "successors" (readTVar succ')
-    wmesVn <- optLeafPropVn owmes "wmes"       (readTVar wmes)
+  Amem       { amemSuccessors  = succ'
+             , amemWmes        = wmes }
+  opts'@Opts { oAmemSuccessors = osucc
+             , oAmemWmes       = owmes } = do
+    succVn <- netPropVn  opts' osucc "successors" (readTVar succ')
+    wmesVn <- dataPropVn opts' owmes "wmes"       (readTVar wmes)
     optVns [succVn, wmesVn]
 {-# INLINE adjsAmem #-}
 
@@ -623,7 +650,129 @@ instance ToVn Node where
   toShowVn = showNode
 
 showNode :: Node -> Opts -> STM ShowS
-showNode node = undefined
+showNode DummyTopNode {} Opts { oNodeIds = oids } =
+  return (withOptIdS oids (showS "DTN (β)") (-1))
+
+showNode node opts' = do
+  let variant = nodeVariant node
+  let s = case variant of
+        Bmem         {} -> showBmem         variant opts'
+        JoinNode     {} -> showJoinNode     variant opts'
+        NegativeNode {} -> showNegativeNode variant opts'
+        NccNode      {} -> showNccNode      variant opts'
+        NccPartner   {} -> showNccPartner   variant opts'
+        PNode        {} -> showPNode        variant opts'
+        DTN          {} -> unreachableCode
+
+  return (withOptIdS (oNodeIds opts') s (nodeId node))
+{-# INLINE showNode #-}
 
 adjsNode :: Node -> Opts -> STM [Vn]
-adjsNode node = undefined
+adjsNode
+  DummyTopNode { nodeChildren  = children
+               , nodeVariant   = variant }
+  opts'@Opts   { oNodeChildren = ochildren } = do
+    childrenVn <- netPropVn opts' ochildren "children" (readTVar children)
+    variantVns <- adjsDTN variant opts'
+    optVns (variantVns ++ [childrenVn])
+
+adjsNode
+  Node { nodeParent    = parent
+       , nodeChildren  = children
+       , nodeVariant   = variant }
+  opts'@Opts   { oNodeChildren = ochildren } = do
+    childrenVn <- netPropVn opts' ochildren "children" (readTVar children)
+    parentVn   <- netPropVn opts' ochildren "parent"   (return [parent])
+    variantVns <- case variant of
+      Bmem         {} -> adjsBmem         variant opts'
+      JoinNode     {} -> adjsJoinNode     variant opts'
+      NegativeNode {} -> adjsNegativeNode variant opts'
+      NccNode      {} -> adjsNccNode      variant opts'
+      NccPartner   {} -> adjsNccPartner   variant opts'
+      PNode        {} -> adjsPNode        variant opts'
+      DTN          {} -> unreachableCode
+
+    optVns (variantVns ++ [parentVn, childrenVn])
+{-# INLINE adjsNode #-}
+
+-- Bmem VISUALIZATION
+
+showBmem :: NodeVariant -> Opts -> ShowS
+showBmem _ _ = showS "β"
+{-# INLINE showBmem #-}
+
+adjsBmemLike :: TSet Token -> TSet Node -> Opts -> STM [Maybe Vn]
+adjsBmemLike toks achildren
+  opts'@Opts { oBmemToks  = otoks, oBmemAllChildren = oachildren } = do
+    achildrenVn <- netPropVn  opts' oachildren "all children" (readTVar achildren)
+    toksVn      <- dataPropVn opts' otoks "toks" (readTVar toks)
+    return [achildrenVn, toksVn]
+{-# INLINE adjsBmemLike #-}
+
+adjsBmem :: NodeVariant -> Opts -> STM [Maybe Vn]
+adjsBmem Bmem { nodeTokens = toks,  bmemAllChildren  = achildren  } opts' =
+  adjsBmemLike toks achildren opts'
+adjsBmem _ _ = unreachableCode
+{-# INLINE adjsBmem #-}
+
+-- DTN VISUALIZATION
+
+adjsDTN :: NodeVariant -> Opts -> STM [Maybe Vn]
+adjsDTN DTN { nodeTokens = toks,  bmemAllChildren  = achildren  } opts' =
+  adjsBmemLike toks achildren opts'
+adjsDTN _ _ = unreachableCode
+{-# INLINE adjsDTN #-}
+
+-- JoinNode VISUALIZATION
+-- oUl
+-- oJoinTests
+-- oJoinAmems
+-- oJoinNearestAncestors
+showJoinNode :: NodeVariant -> Opts -> ShowS
+showJoinNode = undefined
+
+adjsJoinNode :: NodeVariant -> Opts -> STM [Maybe Vn]
+adjsJoinNode = undefined
+
+-- NegativeNode VISUALIZATION
+-- oUl
+-- oNegativeTests
+-- oNegativeAmems
+-- oNegativeNearestAncestors
+-- oNegativeToks
+showNegativeNode :: NodeVariant -> Opts -> ShowS
+showNegativeNode = undefined
+
+adjsNegativeNode :: NodeVariant -> Opts -> STM [Maybe Vn]
+adjsNegativeNode = undefined
+
+-- NccNode/NccPartner VISUALIZATION
+-- oNccConjucts
+-- oNccPartners
+-- oNccNodes
+-- oNccToks
+-- oNccNewResultBuffers
+showNccNode :: NodeVariant -> Opts -> ShowS
+showNccNode = undefined
+
+adjsNccNode :: NodeVariant -> Opts -> STM [Maybe Vn]
+adjsNccNode = undefined
+
+showNccPartner :: NodeVariant -> Opts -> ShowS
+showNccPartner = undefined
+
+adjsNccPartner :: NodeVariant -> Opts -> STM [Maybe Vn]
+adjsNccPartner = undefined
+
+-- PNode VISUALIZATION
+-- oPToks
+-- oPLocations
+showPNode :: NodeVariant -> Opts -> ShowS
+showPNode = undefined
+
+adjsPNode :: NodeVariant -> Opts -> STM [Maybe Vn]
+adjsPNode = undefined
+
+unreachableCode :: a
+unreachableCode = error "Unreachable code. Impossible has happened!!!"
+{-# INLINE unreachableCode #-}

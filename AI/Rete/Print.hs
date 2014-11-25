@@ -37,8 +37,13 @@ import Kask.Data.Function (compose, rcompose)
 -- Vn CONSTRUCTION (ABSTRACTION)
 
 class ToVn a where
-  toVn     :: a -> Vn
+  toAdjsVn :: a -> AdjsVn
   toShowVn :: a -> ShowVn
+
+toVn :: ToVn a => a -> Vn
+toVn x = Vn { vnShowM = toShowVn x
+            , vnAdjs  = toAdjsVn x }
+{-# INLINE toVn #-}
 
 -- VIS.-TREE NODES
 
@@ -441,9 +446,7 @@ noPLocations   o = o { oPLocations = False }
 -- WMES VISUALIZATION
 
 instance ToVn Wme where
-  toVn wme = Vn { vnShowM = showWme wme
-                , vnAdjs  = adjsWme wme }
-
+  toAdjsVn = adjsWme
   toShowVn = showWme
 
 showWme :: Wme -> Opts -> STM ShowS
@@ -494,9 +497,7 @@ adjsWme
 -- TOKENS VISUALIZATION
 
 instance ToVn Token where
-  toVn wme = Vn { vnShowM = showTok wme
-                , vnAdjs  = adjsTok wme }
-
+  toAdjsVn = adjsTok
   toShowVn = showTok
 
 showTok :: Token -> Opts -> STM ShowS
@@ -576,9 +577,7 @@ adjsTok
 -- AMEMS VISUALIZATION
 
 instance ToVn Amem where
-  toVn amem = Vn { vnShowM = showAmem amem
-                 , vnAdjs  = adjsAmem amem }
-
+  toAdjsVn = adjsAmem
   toShowVn = showAmem
 
 showAmem :: Amem -> Opts -> STM ShowS
@@ -620,9 +619,7 @@ adjsAmem
 -- NODE VISUALIZATION
 
 instance ToVn Node where
-  toVn node = Vn { vnShowM = showNode node
-                 , vnAdjs  = adjsNode node }
-
+  toAdjsVn = adjsNode
   toShowVn = showNode
 
 showNode :: Node -> Opts -> STM ShowS

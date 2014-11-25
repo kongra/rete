@@ -151,7 +151,7 @@ boundless c = c { maxDepth = Nothing }
 -- PRINTING STRINGS
 
 instance ShowM STM Opts Symbol where
-  showM Opts {oSymbolIds = ids} s =
+  showM Opts { oSymbolIds = ids } s =
     if ids
       then return (compose [ showString (show (getId s))
                            , showString ('-':show s)])
@@ -531,7 +531,7 @@ instance ToVn Token where
 showTok :: Token -> Opts -> STM ShowS
 showTok
   DummyTopToken {}
-  Opts { oTokIds = oids } = return (withOptIdS oids (showS "⟨⟩") (-1))
+  Opts { oTokIds = oids } = return (withOptIdS oids (showS "{}") (-1))
 
 showTok
   tok
@@ -543,7 +543,7 @@ showTok
               then (if osymbolic
                     then showTokWmesSymbolic tok
                     else showTokWmesExplicit owmeids tok)
-              else showS "⟨..⟩"
+              else showS "{..}"
     return (withOptIdS oids s (tokId tok))
 {-# INLINE showTok #-}
 
@@ -724,6 +724,7 @@ adjsDTN _ _ = unreachableCode
 {-# INLINE adjsDTN #-}
 
 -- JoinNode VISUALIZATION
+
 showJoinNode :: NodeVariant -> Opts -> STM ShowS
 showJoinNode
   JoinNode { leftUnlinked = lu, rightUnlinked = ru }
@@ -767,7 +768,8 @@ adjsJoinNode
     amemVn     <- netPropVn opts' oamems     "amem"  (return [amem])
     ancestorVn <- netPropVn opts' oancestors "ancestor"
                   (joinAncestorM ancestor)
-    return [testsVn, amemVn, ancestorVn]
+
+    return [amemVn, testsVn, ancestorVn]
 
 adjsJoinNode _ _ = unreachableCode
 {-# INLINABLE adjsJoinNode #-}
@@ -779,16 +781,38 @@ joinAncestorM ancestor = case ancestor of
 {-# INLINE joinAncestorM #-}
 
 -- NegativeNode VISUALIZATION
--- oUl
--- oNegativeTests
--- oNegativeAmems
--- oNegativeNearestAncestors
--- oNegativeToks
+
 showNegativeNode :: NodeVariant -> Opts -> STM ShowS
-showNegativeNode = undefined
+showNegativeNode
+  JoinNode { rightUnlinked = ru } Opts { oUl = oul } =
+    if oul
+      then (do mark <- ulSingleMark ru
+               return (showS ('¬':' ':mark)))
+      else return (showS "¬")
+
+showNegativeNode _ _ = unreachableCode
+{-# INLINE showNegativeNode #-}
 
 adjsNegativeNode :: NodeVariant -> Opts -> STM [Maybe Vn]
-adjsNegativeNode = undefined
+adjsNegativeNode
+  NegativeNode { joinTests                   = tests
+               , nodeAmem                    = amem
+               , nearestAncestorWithSameAmem = ancestor
+               , nodeTokens                  = toks}
+  opts'@Opts   { oNegativeTests              = otests
+               , oNegativeAmems              = oamems
+               , oNegativeNearestAncestors   = oancestors
+               , oNegativeToks               = otoks } = do
+
+    amemVn     <- netPropVn opts' oamems     "amem"  (return [amem])
+    testsVn    <- netPropVn opts' otests     "tests" (return tests)
+    ancestorVn <- netPropVn opts' oancestors "ancestor"
+                  (joinAncestorM ancestor)
+    toksVn     <- dataPropVn opts' otoks "toks" (readTVar toks)
+
+    return [amemVn, testsVn, ancestorVn, toksVn]
+
+adjsNegativeNode _ _ = unreachableCode
 
 -- NccNode/NccPartner VISUALIZATION
 -- oNccConjucts
@@ -820,8 +844,24 @@ adjsPNode = undefined
 -- JoinTest VISUALIZATION
 
 instance ToVn JoinTest where
-  toAdjsVn = undefined
-  toShowVn = undefined
+  toAdjsVn = adjsJoinTest
+  toShowVn = showJoinTest
+
+showJoinTest :: JoinTest -> Opts -> STM ShowS
+showJoinTest
+  JoinTest { joinTestField1   = f1
+           , joinTestField2   = f2
+           , joinTestDistance = d } _ =
+    return (compose [ showS "⟨"
+                    , showS f1, showS ","
+                    , showS d,  showS ","
+                    , showS f2
+                    , showS "⟩"])
+{-# INLINE showJoinTest #-}
+
+adjsJoinTest :: JoinTest -> Opts -> STM [Vn]
+adjsJoinTest _ _ = return []
+{-# INLINE adjsJoinTest #-}
 
 -- UTILS
 

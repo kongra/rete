@@ -30,19 +30,6 @@ import Data.Tree.Print
 import Kask.Control.Monad (toListM, mapMM)
 import Kask.Data.Function (compose, rcompose)
 
--- WHAT TO VISUALIZE (type s)
--- wmes
--- toks
--- amems
--- Nodes with NodeVariants
---   bmems
---   join nodes
---   negative nodes
---   ncc nodes
---   ncc partners
---   p-nodes
---   possibly other kinds of nodes ...
-
 -- WHAT WE ACTUALLY NEED FOR s
 -- tree+, tree- - THE API
 -- tree+Impl, tree-Impl - IMPLEMENTATIONS
@@ -62,8 +49,7 @@ type AdjsVn = Opts -> STM [Vn]
 -- visualization process, compatible with the treeprint API.
 data Vn =
   Vn { vnShowM :: !ShowVn
-     , vnAdjsU :: !AdjsVn
-     , vnAdjsD :: !AdjsVn }
+     , vnAdjs  :: !AdjsVn}
 
 instance ShowM STM Opts Vn where showM o Vn { vnShowM = f } = f o
 
@@ -75,17 +61,12 @@ emptyAdjs = return . const []
 
 leafVn :: ShowVn -> Vn
 leafVn svn = Vn { vnShowM = svn
-                , vnAdjsU = emptyAdjs
-                , vnAdjsD = emptyAdjs }
+                , vnAdjs  = emptyAdjs }
 {-# INLINE leafVn #-}
 
 propVn :: ShowS -> [Vn] -> Vn
-propVn name vns = Vn { vnShowM = s
-                     , vnAdjsU = a
-                     , vnAdjsD = a }
-  where
-    s _ = return name
-    a = return . const vns
+propVn name vns = Vn { vnShowM = \_ -> return name
+                     , vnAdjs  = return . const vns }
 {-# INLINE propVn #-}
 
 leafPropVn :: ShowS -> [ShowVn] -> Vn
@@ -130,32 +111,24 @@ optVns :: Monad m => [Maybe Vn] -> m [Vn]
 optVns = return . catMaybes
 {-# INLINE optVns #-}
 
--- CONFIGURATIONS FOR TRAVERSING UP/DOWN
-
-adjsU, adjsD :: Adjs STM Opts Vn
-adjsU o Vn { vnAdjsU = f } = f o
-{-# INLINE adjsU #-}
-adjsD o Vn { vnAdjsD = f } = f o
-{-# INLINE adjsD #-}
+-- CONFIGURATION FOR TRAVERSING UP/DOWN
 
 type VConf = Conf STM ShowS Opts Vn
 
-confU, confD :: VConf
-confU = Conf { impl     = stmImpl
-             , adjs     = adjsU
-             , maxDepth = Nothing
-             , opts     = defaultOpts }
-
-confD = confU { adjs = adjsD }
+conf :: VConf
+conf = Conf { impl     = stmImpl
+            , adjs     = \o Vn { vnAdjs = f } -> f o
+            , maxDepth = Nothing
+            , opts     = defaultOpts }
 
 -- | Sets the maxDepth of a configuration to the specified value.
 depth :: Int -> VConf -> VConf
-depth d conf = conf { maxDepth = Just d }
+depth d c = c { maxDepth = Just d }
 {-# INLINE depth #-}
 
 -- | Unlimits the maxDepth of a configuration.
 boundless :: VConf -> VConf
-boundless conf = conf { maxDepth = Nothing }
+boundless c = c { maxDepth = Nothing }
 {-# INLINE boundless #-}
 
 -- PRINTING STRINGS
@@ -198,7 +171,7 @@ data Opts =
   , oAmemFields               :: !Bool
   , oAmemRefcount             :: !Bool
   , oAmemWmes                 :: !Bool
-  , oAmemWmesSymbolic         :: !Bool
+  , oAmemSuccessors           :: !Bool
 
   , oNodeIds                  :: !Bool
   , oUl                       :: !Bool
@@ -246,9 +219,9 @@ defaultOpts =
   , oTokOwner                 = False
 
   , oAmemFields               = True
-  , oAmemRefcount             = True
+  , oAmemRefcount             = False
   , oAmemWmes                 = False
-  , oAmemWmesSymbolic         = True
+  , oAmemSuccessors           = False
 
   , oNodeIds                  = False
   , oUl                       = True
@@ -316,10 +289,8 @@ noAmems   = noWmeAmems   . noNodeAmems
 withAllWmesSymbolic, withAllWmesExplicit :: Oswitch
 withAllWmesSymbolic = withWmesSymbolic
                     . withTokWmesSymbolic
-                    . withAmemWmesSymbolic
 withAllWmesExplicit = withWmesExplicit
                     . withTokWmesExplicit
-                    . withAmemWmesExplicit
 
 -- SPECIFIC OPTS.
 
@@ -395,9 +366,9 @@ withAmemWmes, noAmemWmes :: Oswitch
 withAmemWmes o = o { oAmemWmes = True  }
 noAmemWmes   o = o { oAmemWmes = False }
 
-withAmemWmesSymbolic, withAmemWmesExplicit :: Oswitch
-withAmemWmesSymbolic o = o { oAmemWmesSymbolic = True }
-withAmemWmesExplicit o = o { oAmemWmesSymbolic = False }
+withAmemSuccessors, noAmemSuccessors :: Oswitch
+withAmemSuccessors o = o { oAmemSuccessors = True  }
+noAmemSuccessors   o = o { oAmemSuccessors = False }
 
 withNodeIds, noNodeIds :: Oswitch
 withNodeIds o = o { oNodeIds = True  }
@@ -470,9 +441,8 @@ noPLocations   o = o { oPLocations = False }
 -- WMES VISUALIZATION
 
 instance ToVn Wme where
-  toVn wme = Vn { vnShowM = showWme  wme
-                , vnAdjsU = adjsWmeU wme
-                , vnAdjsD = adjsWmeD wme }
+  toVn wme = Vn { vnShowM = showWme wme
+                , vnAdjs  = adjsWme wme }
 
   toShowVn = showWme
 
@@ -501,11 +471,8 @@ showWmeMaybe _ Nothing    = showS "_"
 showWmeMaybe f (Just wme) = f wme
 {-# INLINE showWmeMaybe #-}
 
-adjsWmeU :: Wme -> Opts -> STM [Vn]
-adjsWmeU = adjsWmeD
-
-adjsWmeD :: Wme -> Opts -> STM [Vn]
-adjsWmeD
+adjsWme :: Wme -> Opts -> STM [Vn]
+adjsWme
   Wme  { wmeAmems                = amems
        , wmeTokens               = toks
        , wmeNegJoinResults       = jresults}
@@ -522,14 +489,13 @@ adjsWmeD
               (mapMM (return . negativeJoinResultOwner) (toListT jresults))
 
     optVns [amemVn, toksVn, njrsVn]
-{-# INLINABLE adjsWmeD #-}
+{-# INLINE adjsWme #-}
 
 -- TOKENS VISUALIZATION
 
 instance ToVn Token where
-  toVn wme = Vn { vnShowM = showTok  wme
-                , vnAdjsU = adjsTokU wme
-                , vnAdjsD = adjsTokD wme }
+  toVn wme = Vn { vnShowM = showTok wme
+                , vnAdjs  = adjsTok wme }
 
   toShowVn = showTok
 
@@ -550,7 +516,7 @@ showTok
                     else showTokWmesExplicit owmeids tok)
               else showS "⟨..⟩"
     return (withOptIdS oids s (tokId tok))
-{-# INLINABLE showTok #-}
+{-# INLINE showTok #-}
 
 showTokWmesSymbolic :: Token -> ShowS
 showTokWmesSymbolic = showTokWmes showWmeSymbolic
@@ -567,18 +533,15 @@ showTokWmes f = rcompose
               . tokWmes
 {-# INLINE showTokWmes #-}
 
-adjsTokU :: Token -> Opts -> STM [Vn]
-adjsTokU = adjsTokD
-
-adjsTokD :: Token -> Opts -> STM [Vn]
-adjsTokD
+adjsTok :: Token -> Opts -> STM [Vn]
+adjsTok
   DummyTopToken { tokNode  = node,  tokChildren  = children  }
   Opts          { oTokNode = onode, oTokChildren = ochildren } = do
     nodeVn     <- optLeafPropVn onode     "node"     (return [node])
     childrenVn <- optLeafPropVn ochildren "children" (readTVar children)
     optVns [nodeVn, childrenVn]
 
-adjsTokD
+adjsTok
   Token { tokParent         = parent
         , tokOwner          = mowner
         , tokNode           = node
@@ -608,15 +571,62 @@ adjsTokD
       owner ow = case ow of
         Nothing -> []
         Just o  -> [o]
+{-# INLINE adjsTok #-}
 
 -- AMEMS VISUALIZATION
 
 instance ToVn Amem where
-  toVn     _ = undefined
-  toShowVn _ = undefined
+  toVn amem = Vn { vnShowM = showAmem amem
+                 , vnAdjs  = adjsAmem amem }
+
+  toShowVn = showAmem
+
+showAmem :: Amem -> Opts -> STM ShowS
+showAmem
+  Amem { amemObj            = obj
+       , amemAttr           = attr
+       , amemVal            = val
+       , amemReferenceCount = rcount }
+  Opts { oAmemFields        = ofields
+       , oAmemRefcount      = orc } = do
+    let alpha = showS "α"
+    let repr  = if ofields
+                  then compose [alpha, showS " ("
+                                , sS obj,  showS ","
+                                , sS attr, showS ","
+                                , sS val,  showS ")"]
+                  else alpha
+    if orc
+      then (do rc <- readTVar rcount
+               return $ compose [repr, showS " :rc", showS rc])
+      else return repr
+  where
+    sS s | s == wildcardSymbol = showS "*"
+         | otherwise           = showS s
+{-# INLINE showAmem #-}
+
+adjsAmem :: Amem -> Opts -> STM [Vn]
+adjsAmem
+  Amem { amemSuccessors  = succ'
+       , amemWmes        = wmes }
+  Opts { oAmemSuccessors = osucc
+       , oAmemWmes       = owmes } = do
+
+    succVn <- optLeafPropVn osucc "successors" (readTVar succ')
+    wmesVn <- optLeafPropVn owmes "wmes"       (readTVar wmes)
+    optVns [succVn, wmesVn]
+{-# INLINE adjsAmem #-}
 
 -- NODE VISUALIZATION
 
 instance ToVn Node where
-  toVn     _ = undefined
-  toShowVn _ = undefined
+  toVn node = Vn { vnShowM = showNode node
+                 , vnAdjs  = adjsNode node }
+
+  toShowVn = showNode
+
+showNode :: Node -> Opts -> STM ShowS
+showNode node = undefined
+
+adjsNode :: Node -> Opts -> STM [Vn]
+adjsNode node = undefined

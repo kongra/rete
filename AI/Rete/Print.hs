@@ -655,14 +655,14 @@ showNode DummyTopNode {} Opts { oNodeIds = oids } =
 
 showNode node opts' = do
   let variant = nodeVariant node
-  let s = case variant of
-        Bmem         {} -> showBmem         variant opts'
-        JoinNode     {} -> showJoinNode     variant opts'
-        NegativeNode {} -> showNegativeNode variant opts'
-        NccNode      {} -> showNccNode      variant opts'
-        NccPartner   {} -> showNccPartner   variant opts'
-        PNode        {} -> showPNode        variant opts'
-        DTN          {} -> unreachableCode
+  s <- case variant of
+    Bmem         {} -> showBmem         variant opts'
+    JoinNode     {} -> showJoinNode     variant opts'
+    NegativeNode {} -> showNegativeNode variant opts'
+    NccNode      {} -> showNccNode      variant opts'
+    NccPartner   {} -> showNccPartner   variant opts'
+    PNode        {} -> showPNode        variant opts'
+    DTN          {} -> unreachableCode
 
   return (withOptIdS (oNodeIds opts') s (nodeId node))
 {-# INLINE showNode #-}
@@ -697,8 +697,8 @@ adjsNode
 
 -- Bmem VISUALIZATION
 
-showBmem :: NodeVariant -> Opts -> ShowS
-showBmem _ _ = showS "β"
+showBmem :: NodeVariant -> Opts -> STM ShowS
+showBmem _ _ = return (showS "β")
 {-# INLINE showBmem #-}
 
 adjsBmemLike :: TSet Token -> TSet Node -> Opts -> STM [Maybe Vn]
@@ -724,15 +724,59 @@ adjsDTN _ _ = unreachableCode
 {-# INLINE adjsDTN #-}
 
 -- JoinNode VISUALIZATION
--- oUl
--- oJoinTests
--- oJoinAmems
--- oJoinNearestAncestors
-showJoinNode :: NodeVariant -> Opts -> ShowS
-showJoinNode = undefined
+showJoinNode :: NodeVariant -> Opts -> STM ShowS
+showJoinNode
+  JoinNode { leftUnlinked = lu, rightUnlinked = ru }
+  Opts     { oUl = oul } =
+    if oul
+      then (do mark <- ulMark lu ru
+               return (showS ('⊳':'⊲':' ':mark)))
+      else return (showS "⊳⊲")
+
+showJoinNode _ _ = unreachableCode
+{-# INLINE showJoinNode #-}
+
+ulSign :: Bool -> Char
+ulSign True  = '-'
+ulSign False = '+'
+{-# INLINE ulSign #-}
+
+ulMark :: TVar Bool -> TVar Bool -> STM String
+ulMark lu ru = do
+  l <- readTVar lu
+  r <- readTVar ru
+  return [ulSign l, '/', ulSign r]
+{-# INLINE ulMark #-}
+
+ulSingleMark :: TVar Bool -> STM String
+ulSingleMark unl = do
+  u <- readTVar unl
+  return ['_', '/', ulSign u]
+{-# INLINE ulSingleMark #-}
 
 adjsJoinNode :: NodeVariant -> Opts -> STM [Maybe Vn]
-adjsJoinNode = undefined
+adjsJoinNode
+  JoinNode   { joinTests                   = tests
+             , nodeAmem                    = amem
+             , nearestAncestorWithSameAmem = ancestor }
+  opts'@Opts { oJoinTests                  = otests
+             , oJoinAmems                  = oamems
+             , oJoinNearestAncestors       = oancestors } = do
+
+    testsVn    <- netPropVn opts' otests     "tests" (return tests)
+    amemVn     <- netPropVn opts' oamems     "amem"  (return [amem])
+    ancestorVn <- netPropVn opts' oancestors "ancestor"
+                  (joinAncestorM ancestor)
+    return [testsVn, amemVn, ancestorVn]
+
+adjsJoinNode _ _ = unreachableCode
+{-# INLINABLE adjsJoinNode #-}
+
+joinAncestorM :: Monad m => Maybe a -> m [a]
+joinAncestorM ancestor = case ancestor of
+  Nothing -> return []
+  Just a  -> return [a]
+{-# INLINE joinAncestorM #-}
 
 -- NegativeNode VISUALIZATION
 -- oUl
@@ -740,7 +784,7 @@ adjsJoinNode = undefined
 -- oNegativeAmems
 -- oNegativeNearestAncestors
 -- oNegativeToks
-showNegativeNode :: NodeVariant -> Opts -> ShowS
+showNegativeNode :: NodeVariant -> Opts -> STM ShowS
 showNegativeNode = undefined
 
 adjsNegativeNode :: NodeVariant -> Opts -> STM [Maybe Vn]
@@ -752,13 +796,13 @@ adjsNegativeNode = undefined
 -- oNccNodes
 -- oNccToks
 -- oNccNewResultBuffers
-showNccNode :: NodeVariant -> Opts -> ShowS
+showNccNode :: NodeVariant -> Opts -> STM ShowS
 showNccNode = undefined
 
 adjsNccNode :: NodeVariant -> Opts -> STM [Maybe Vn]
 adjsNccNode = undefined
 
-showNccPartner :: NodeVariant -> Opts -> ShowS
+showNccPartner :: NodeVariant -> Opts -> STM ShowS
 showNccPartner = undefined
 
 adjsNccPartner :: NodeVariant -> Opts -> STM [Maybe Vn]
@@ -767,11 +811,19 @@ adjsNccPartner = undefined
 -- PNode VISUALIZATION
 -- oPToks
 -- oPLocations
-showPNode :: NodeVariant -> Opts -> ShowS
+showPNode :: NodeVariant -> Opts -> STM ShowS
 showPNode = undefined
 
 adjsPNode :: NodeVariant -> Opts -> STM [Maybe Vn]
 adjsPNode = undefined
+
+-- JoinTest VISUALIZATION
+
+instance ToVn JoinTest where
+  toAdjsVn = undefined
+  toShowVn = undefined
+
+-- UTILS
 
 unreachableCode :: a
 unreachableCode = error "Unreachable code. Impossible has happened!!!"

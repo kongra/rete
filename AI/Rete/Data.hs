@@ -56,6 +56,7 @@ module AI.Rete.Data
     , SymbolLocation (..)
     , Field          (..)
     , VariableBindings
+    , Distance
     )
     where
 

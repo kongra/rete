@@ -20,16 +20,17 @@
 ------------------------------------------------------------------------
 module AI.Rete.Print where
 
-import AI.Rete.Algo
-import AI.Rete.Data
-import Control.Concurrent.STM
-import Control.Monad (liftM)
-import Data.Foldable (Foldable)
-import Data.List (intersperse)
-import Data.Maybe (catMaybes)
-import Data.Tree.Print
-import Kask.Control.Monad (toListM, mapMM)
-import Kask.Data.Function (compose, rcompose)
+import           AI.Rete.Algo
+import           AI.Rete.Data
+import           Control.Concurrent.STM
+import           Control.Monad (liftM)
+import           Data.Foldable (Foldable)
+import qualified Data.HashMap.Strict as Map
+import           Data.List (intersperse)
+import           Data.Maybe (catMaybes, fromJust)
+import           Data.Tree.Print
+import           Kask.Control.Monad (toListM, mapMM)
+import           Kask.Data.Function (compose, rcompose)
 
 -- Vns (VISUALIZATION NODEs)
 
@@ -834,20 +835,64 @@ showNccPartner
       else return (showString "Ncc (P)")
 
 showNccPartner _ _ = unreachableCode
+{-# INLINE showNccPartner #-}
 
--- oNccNodes
--- oNccNewResultBuffers
 adjsNccPartner :: NodeVariant -> Opts -> STM [Maybe Vn]
-adjsNccPartner = undefined
+adjsNccPartner
+  NccPartner { nccPartnerNccNode         = node
+             , nccPartnerNewResultBuffer = buff }
+  opts'@Opts { oNccNodes                 = onodes
+             , oNccNewResultBuffers      = obuffs } = do
+    node'  <- readTVar node
+    nodeVn <- netPropVn  opts' onodes "ncc node" (return [fromJust node'])
+    toksVn <- dataPropVn opts' obuffs "new result buff." (readTVar buff)
+    return [nodeVn, toksVn]
+
+adjsNccPartner _ _ = unreachableCode
+{-# INLINE adjsNccPartner #-}
 
 -- PNode VISUALIZATION
--- oPToks
--- oPLocations
+
 showPNode :: NodeVariant -> Opts -> STM ShowS
-showPNode = undefined
+showPNode PNode {} _ = return (showString "P")
+showPNode _        _ = unreachableCode
+{-# INLINE showPNode #-}
 
 adjsPNode :: NodeVariant -> Opts -> STM [Maybe Vn]
-adjsPNode = undefined
+adjsPNode
+  PNode      { nodeTokens            = toks
+             , pnodeVariableBindings = bindings }
+  opts'@Opts { oPToks                = otoks
+             , oPLocations           = olocs } = do
+    toksVn <- dataPropVn opts' otoks "toks" (readTVar toks)
+    locsVn <- netPropVn  opts' olocs "vars" (varlocs bindings)
+    return [locsVn, toksVn]
+
+adjsPNode _ _ = unreachableCode
+{-# INLINE adjsPNode #-}
+
+-- VARIABLE LOCATIONS CREATION AND VISUALIZATION
+
+data VLoc = VLoc !Symbol !Field !Distance
+
+varlocs :: VariableBindings -> STM [VLoc]
+varlocs = return . map vbinding2VLoc . Map.toList
+  where vbinding2VLoc (s, SymbolLocation f d) = VLoc s f d
+{-# INLINE varlocs #-}
+
+instance ToVn VLoc where
+  toAdjsVn = adjsVLoc
+  toShowVn = showVLoc
+
+showVLoc :: VLoc -> Opts -> STM ShowS
+showVLoc (VLoc s f d) _ =
+  return (compose [ shows s, showString " → "
+                  , shows d, showString ",", shows f])
+{-# INLINE showVLoc #-}
+
+adjsVLoc :: VLoc -> Opts -> STM [Vn]
+adjsVLoc _ _ = return []
+{-# INLINE adjsVLoc #-}
 
 -- JoinTest VISUALIZATION
 
@@ -871,7 +916,7 @@ adjsJoinTest :: JoinTest -> Opts -> STM [Vn]
 adjsJoinTest _ _ = return []
 {-# INLINE adjsJoinTest #-}
 
--- UTILS
+-- MISC.
 
 unreachableCode :: a
 unreachableCode = error "Unreachable code. Impossible has happened!!!"

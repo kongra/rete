@@ -20,20 +20,16 @@
 ------------------------------------------------------------------------
 module AI.Rete.Print
     (
-      -- * Print API
+      -- * Print methods
       toShowS
     , toString
 
       -- * The constraints of the process
-    , Depth
     , depth
     , boundless
     , Mode (Net, Data)
 
-      -- * Options
-    , Oswitch
-
-      -- * Common, aggregate options
+      -- * Aggregate presentation options
     , withIds, noIds
     , withToks, noToks
     , withNodeToks, noNodeToks
@@ -42,20 +38,14 @@ module AI.Rete.Print
     , withAmems, noAmems
     , withAllWmesSymbolic, withAllWmesExplicit
 
-      -- * 'Mode' options
-    , inDataMode, inNetMode
-
-      -- * 'Symbol' options (currently do nothing)
-    , withSymbolIds, noSymbolIds
-
-      -- * 'Wme' options
+      -- * 'Wme' presentation options
     , withWmeIds, noWmeIds
     , withWmesSymbolic, withWmesExplicit
     , withWmeAmems, noWmeAmems
     , withWmeToks, noWmeToks
     , withWmeNegativeJoinResults, noWmeNegativeJoinResults
 
-      -- * 'Token' options
+      -- * 'Token' presentation options
     , withTokIds, noTokIds
     , withTokWmes, noTokWmes
     , withTokWmesSymbolic, withTokWmesExplicit
@@ -66,43 +56,43 @@ module AI.Rete.Print
     , withTokNccResults, noTokNccResults
     , withTokOwner, noTokOwner
 
-      -- * 'Amem' options
+      -- * 'Amem' presentation options
     , withAmemFields, noAmemFields
     , withAmemRefcount, noAmemRefcount
     , withAmemWmes, noAmemWmes
     , withAmemSuccessors, noAmemSuccessors
 
-      -- * Common Rete 'Node' options
+      -- * Common Rete 'Node' presentation options
     , withNodeIds, noNodeIds
 
-      -- * Common unlinking options
+      -- * Common unlinking presentation options
     , withUl, noUl
 
-      -- * 'Bmem' options
+      -- * 'Bmem' presentation options
     , withBmemToks, noBmemToks
     , withBmemAllChildren, noBmemAllChildren
 
-      -- * 'JoinNode' options
+      -- * 'JoinNode' presentation options
     , withJoinTests, noJoinTests
     , withJoinAmems, noJoinAmems
     , withJoinNearestAncestors, noJoinNearestAncestors
 
-      -- * 'NegativeNode' options
+      -- * 'NegativeNode' presentation options
     , withNegativeTests, noNegativeTests
     , withNegativeAmems, noNegativeAmems
     , withNegativeNearestAncestors, noNegativeNearestAncestors
     , withNegativeToks, noNegativeToks
 
-      -- * 'NccNode' options
+      -- * 'NccNode' presentation options
     , withNccConjucts, noNccConjucts
     , withNccPartners, noNccPartners
 
-      -- * 'NccPartner' options
+      -- * 'NccPartner' presentation options
     , withNccNodes, noNccNodes
     , withNccToks, noNccToks
     , withNccNewResultBuffers, noNccNewResultBuffers
 
-      -- * 'PNode' options
+      -- * 'PNode' presentation options
     , withPToks, noPToks
     , withPLocations, noPLocations
     )
@@ -223,19 +213,31 @@ conf = Conf { impl     = stmImpl
             , maxDepth = Nothing
             , opts     = defaultOpts }
 
+-- | A specifier of depth of the treePrint process.
+type Depth = VConf -> VConf
+
 -- | Sets the maxDepth of a configuration to the specified value.
-depth :: Int -> VConf -> VConf
+depth :: Int -> Depth
 depth d c = c { maxDepth = Just d }
 {-# INLINE depth #-}
 
 -- | Unlimits the maxDepth of a configuration.
-boundless :: VConf -> VConf
+boundless :: Depth
 boundless c = c { maxDepth = Nothing }
 {-# INLINE boundless #-}
 
-applyOswitch :: Oswitch -> VConf -> VConf
-applyOswitch oswitch c@Conf { opts = opts' } = c { opts = oswitch opts' }
-{-# INLINE applyOswitch #-}
+applySwitch :: Switch -> VConf -> VConf
+applySwitch oswitch c@Conf { opts = opts' } = c { opts = oswitch opts' }
+{-# INLINE applySwitch #-}
+
+-- | A mode of operating on Rete objects.
+data Mode = Net  -- ^ Puts an emphasis on the structure of the network.
+          | Data -- ^ Puts an emphasis on the data stored insite the network.
+
+modeSwitch :: Mode -> Switch
+modeSwitch Net  = inNetMode
+modeSwitch Data = inDataMode
+{-# INLINE modeSwitch #-}
 
 -- STM IMPL
 
@@ -352,11 +354,11 @@ defaultOpts =
   , oPLocations               = False }
 
 -- | A composable option.
-type Oswitch = Opts -> Opts
+type Switch = Opts -> Opts
 
 -- META OPTS.
 
-withIds, noIds :: Oswitch
+withIds, noIds :: Switch
 withIds = withSymbolIds
         . withWmeIds
         . withTokIds
@@ -366,11 +368,11 @@ noIds   = noSymbolIds
         . noTokIds
         . noNodeIds
 
-withToks, noToks :: Oswitch
+withToks, noToks :: Switch
 withToks = withWmeToks . withNodeToks
 noToks   = noWmeToks   . noNodeToks
 
-withNodeToks, noNodeToks :: Oswitch
+withNodeToks, noNodeToks :: Switch
 withNodeToks = withBmemToks
              . withNegativeToks
              . withNccToks
@@ -380,173 +382,173 @@ noNodeToks   = noBmemToks
              . noNccToks
              . noPToks
 
-withTests, noTests :: Oswitch
+withTests, noTests :: Switch
 withTests = withJoinTests    . withNegativeTests
 noTests   = noJoinTests . noNegativeTests
 
-withNodeAmems, noNodeAmems :: Oswitch
+withNodeAmems, noNodeAmems :: Switch
 withNodeAmems = withJoinAmems . withNegativeAmems
 noNodeAmems   = noJoinAmems   . noNegativeAmems
 
-withAmems, noAmems :: Oswitch
+withAmems, noAmems :: Switch
 withAmems = withWmeAmems . withNodeAmems
 noAmems   = noWmeAmems   . noNodeAmems
 
-withAllWmesSymbolic, withAllWmesExplicit :: Oswitch
+withAllWmesSymbolic, withAllWmesExplicit :: Switch
 withAllWmesSymbolic = withWmesSymbolic . withTokWmesSymbolic
 withAllWmesExplicit = withWmesExplicit . withTokWmesExplicit
 
 -- SPECIFIC OPTS.
 
-inDataMode, inNetMode :: Oswitch
+inDataMode, inNetMode :: Switch
 inDataMode o = o { oDataMode = True  }
 inNetMode  o = o { oDataMode = False }
 
-withSymbolIds, noSymbolIds :: Oswitch
+withSymbolIds, noSymbolIds :: Switch
 withSymbolIds o = o { oSymbolIds = True  }
 noSymbolIds   o = o { oSymbolIds = False }
 
-withWmeIds, noWmeIds :: Oswitch
+withWmeIds, noWmeIds :: Switch
 withWmeIds o = o { oWmeIds = True  }
 noWmeIds   o = o { oWmeIds = False }
 
-withWmesSymbolic, withWmesExplicit :: Oswitch
+withWmesSymbolic, withWmesExplicit :: Switch
 withWmesSymbolic o = o { oWmeSymbolic = True }
 withWmesExplicit o = o { oWmeSymbolic = False }
 
-withWmeAmems, noWmeAmems :: Oswitch
+withWmeAmems, noWmeAmems :: Switch
 withWmeAmems o = o { oWmeAmems = True  }
 noWmeAmems   o = o { oWmeAmems = False }
 
-withWmeToks, noWmeToks :: Oswitch
+withWmeToks, noWmeToks :: Switch
 withWmeToks o = o { oWmeToks = True  }
 noWmeToks   o = o { oWmeToks = False }
 
-withWmeNegativeJoinResults, noWmeNegativeJoinResults :: Oswitch
+withWmeNegativeJoinResults, noWmeNegativeJoinResults :: Switch
 withWmeNegativeJoinResults o = o { oWmeNegativeJoinResults = True  }
 noWmeNegativeJoinResults   o = o { oWmeNegativeJoinResults = False }
 
-withTokIds, noTokIds :: Oswitch
+withTokIds, noTokIds :: Switch
 withTokIds o = o { oTokIds = True  }
 noTokIds   o = o { oTokIds = False }
 
-withTokWmes, noTokWmes :: Oswitch
+withTokWmes, noTokWmes :: Switch
 withTokWmes o = o { oTokWmes = True  }
 noTokWmes   o = o { oTokWmes = False }
 
-withTokWmesSymbolic, withTokWmesExplicit :: Oswitch
+withTokWmesSymbolic, withTokWmesExplicit :: Switch
 withTokWmesSymbolic o = o { oTokWmesSymbolic = True }
 withTokWmesExplicit o = o { oTokWmesSymbolic = False }
 
-withTokParent, noTokParent :: Oswitch
+withTokParent, noTokParent :: Switch
 withTokParent o = o { oTokParent = True  }
 noTokParent   o = o { oTokParent = False }
 
-withTokNode, noTokNode :: Oswitch
+withTokNode, noTokNode :: Switch
 withTokNode o = o { oTokNode = True  }
 noTokNode   o = o { oTokNode = False }
 
-withTokChildren, noTokChildren :: Oswitch
+withTokChildren, noTokChildren :: Switch
 withTokChildren o = o { oTokChildren = True  }
 noTokChildren   o = o { oTokChildren = False }
 
-withTokJoinResults, noTokJoinResults :: Oswitch
+withTokJoinResults, noTokJoinResults :: Switch
 withTokJoinResults o = o { oTokJoinResults = True  }
 noTokJoinResults   o = o { oTokJoinResults = False }
 
-withTokNccResults, noTokNccResults :: Oswitch
+withTokNccResults, noTokNccResults :: Switch
 withTokNccResults o = o { oTokNccResults = True  }
 noTokNccResults   o = o { oTokNccResults = False }
 
-withTokOwner, noTokOwner :: Oswitch
+withTokOwner, noTokOwner :: Switch
 withTokOwner o = o { oTokOwner = True  }
 noTokOwner   o = o { oTokOwner = False }
 
-withAmemFields, noAmemFields :: Oswitch
+withAmemFields, noAmemFields :: Switch
 withAmemFields o = o { oAmemFields = True  }
 noAmemFields   o = o { oAmemFields = False }
 
-withAmemRefcount, noAmemRefcount :: Oswitch
+withAmemRefcount, noAmemRefcount :: Switch
 withAmemRefcount o = o { oAmemRefcount = True  }
 noAmemRefcount   o = o { oAmemRefcount = False }
 
-withAmemWmes, noAmemWmes :: Oswitch
+withAmemWmes, noAmemWmes :: Switch
 withAmemWmes o = o { oAmemWmes = True  }
 noAmemWmes   o = o { oAmemWmes = False }
 
-withAmemSuccessors, noAmemSuccessors :: Oswitch
+withAmemSuccessors, noAmemSuccessors :: Switch
 withAmemSuccessors o = o { oAmemSuccessors = True  }
 noAmemSuccessors   o = o { oAmemSuccessors = False }
 
-withNodeIds, noNodeIds :: Oswitch
+withNodeIds, noNodeIds :: Switch
 withNodeIds o = o { oNodeIds = True  }
 noNodeIds   o = o { oNodeIds = False }
 
-withUl, noUl :: Oswitch
+withUl, noUl :: Switch
 withUl o = o { oUl = True  }
 noUl   o = o { oUl = False }
 
-withBmemToks, noBmemToks :: Oswitch
+withBmemToks, noBmemToks :: Switch
 withBmemToks o = o { oBmemToks = True  }
 noBmemToks   o = o { oBmemToks = False }
 
-withBmemAllChildren, noBmemAllChildren :: Oswitch
+withBmemAllChildren, noBmemAllChildren :: Switch
 withBmemAllChildren o = o { oBmemAllChildren = True  }
 noBmemAllChildren   o = o { oBmemAllChildren = False }
 
-withJoinTests, noJoinTests :: Oswitch
+withJoinTests, noJoinTests :: Switch
 withJoinTests o = o { oJoinTests = True  }
 noJoinTests   o = o { oJoinTests = False }
 
-withJoinAmems, noJoinAmems :: Oswitch
+withJoinAmems, noJoinAmems :: Switch
 withJoinAmems o = o { oJoinAmems = True  }
 noJoinAmems   o = o { oJoinAmems = False }
 
-withJoinNearestAncestors, noJoinNearestAncestors :: Oswitch
+withJoinNearestAncestors, noJoinNearestAncestors :: Switch
 withJoinNearestAncestors o = o { oJoinNearestAncestors = True  }
 noJoinNearestAncestors   o = o { oJoinNearestAncestors = False }
 
-withNegativeTests, noNegativeTests :: Oswitch
+withNegativeTests, noNegativeTests :: Switch
 withNegativeTests o = o { oNegativeTests = True  }
 noNegativeTests   o = o { oNegativeTests = False }
 
-withNegativeAmems, noNegativeAmems :: Oswitch
+withNegativeAmems, noNegativeAmems :: Switch
 withNegativeAmems o = o { oNegativeAmems = True  }
 noNegativeAmems   o = o { oNegativeAmems = False }
 
-withNegativeNearestAncestors, noNegativeNearestAncestors :: Oswitch
+withNegativeNearestAncestors, noNegativeNearestAncestors :: Switch
 withNegativeNearestAncestors o = o { oNegativeNearestAncestors = True  }
 noNegativeNearestAncestors   o = o { oNegativeNearestAncestors = False }
 
-withNegativeToks, noNegativeToks :: Oswitch
+withNegativeToks, noNegativeToks :: Switch
 withNegativeToks o = o { oNegativeToks = True  }
 noNegativeToks   o = o { oNegativeToks = False }
 
-withNccConjucts, noNccConjucts :: Oswitch
+withNccConjucts, noNccConjucts :: Switch
 withNccConjucts o = o { oNccConjucts = True  }
 noNccConjucts   o = o { oNccConjucts = False }
 
-withNccPartners, noNccPartners :: Oswitch
+withNccPartners, noNccPartners :: Switch
 withNccPartners o = o { oNccPartners = True  }
 noNccPartners   o = o { oNccPartners = False }
 
-withNccNodes, noNccNodes :: Oswitch
+withNccNodes, noNccNodes :: Switch
 withNccNodes o = o { oNccNodes = True  }
 noNccNodes   o = o { oNccNodes = False }
 
-withNccToks, noNccToks :: Oswitch
+withNccToks, noNccToks :: Switch
 withNccToks o = o { oNccToks = True  }
 noNccToks   o = o { oNccToks = False }
 
-withNccNewResultBuffers, noNccNewResultBuffers :: Oswitch
+withNccNewResultBuffers, noNccNewResultBuffers :: Switch
 withNccNewResultBuffers o = o { oNccNewResultBuffers = True  }
 noNccNewResultBuffers   o = o { oNccNewResultBuffers = False }
 
-withPToks, noPToks :: Oswitch
+withPToks, noPToks :: Switch
 withPToks o = o { oPToks = True  }
 noPToks   o = o { oPToks = False }
 
-withPLocations, noPLocations :: Oswitch
+withPLocations, noPLocations :: Switch
 withPLocations o = o { oPLocations = True  }
 noPLocations   o = o { oPLocations = False }
 
@@ -1015,28 +1017,16 @@ unreachableCode = error "Unreachable code. Impossible has happened!!!"
 
 -- PRINT IMPLEMENTATION
 
--- | A mode of operating on Rete objects.
-data Mode = Net  -- ^ Emphasis on the structure of the network
-          | Data -- ^ Emphasis on the data stored insite the network.
-
-modeOswitch :: Mode -> Oswitch
-modeOswitch Net  = inNetMode
-modeOswitch Data = inDataMode
-{-# INLINE modeOswitch #-}
-
--- | A specifier of depth of the treePrint process.
-type Depth = VConf -> VConf
-
 -- | Converts the selected object to a tree representation (expressed
 -- in ShowS).
-toShowS :: ToVn a => Mode -> Depth -> Oswitch -> a -> STM ShowS
-toShowS m d oswitch = printTree (switches conf) . toVn
+toShowS :: ToVn a => Mode -> Depth -> Switch -> a -> STM ShowS
+toShowS m d switch = printTree (switches conf) . toVn
   where
-    switches = d                             -- finally depth
-             . applyOswitch (modeOswitch m)  -- next the mode
-             . applyOswitch oswitch          -- options come first
+    switches = d                           -- finally depth
+             . applySwitch (modeSwitch m)  -- next the mode
+             . applySwitch switch          -- options come first
 
 -- | Works like toShowS, but returns String instead of ShowS
-toString :: ToVn a => Mode -> Depth -> Oswitch -> a -> STM String
-toString m d oswitch = liftM evalShowS . toShowS m d oswitch
+toString :: ToVn a => Mode -> Depth -> Switch -> a -> STM String
+toString m d switch = liftM evalShowS . toShowS m d switch
   where evalShowS s = s ""

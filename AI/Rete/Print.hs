@@ -18,7 +18,95 @@
 --
 -- Textual visualization of Rete network and data.
 ------------------------------------------------------------------------
-module AI.Rete.Print where
+module AI.Rete.Print
+    (
+      -- * Print API
+      toShowS
+    , toString
+
+      -- * The constraints of the process
+    , Depth
+    , depth
+    , boundless
+    , Mode (Net, Data)
+
+      -- * Options
+    , Oswitch
+
+      -- * Common, aggregate options
+    , withIds, noIds
+    , withToks, noToks
+    , withNodeToks, noNodeToks
+    , withTests, noTests
+    , withNodeAmems, noNodeAmems
+    , withAmems, noAmems
+    , withAllWmesSymbolic, withAllWmesExplicit
+
+      -- * 'Mode' options
+    , inDataMode, inNetMode
+
+      -- * 'Symbol' options (currently do nothing)
+    , withSymbolIds, noSymbolIds
+
+      -- * 'Wme' options
+    , withWmeIds, noWmeIds
+    , withWmesSymbolic, withWmesExplicit
+    , withWmeAmems, noWmeAmems
+    , withWmeToks, noWmeToks
+    , withWmeNegativeJoinResults, noWmeNegativeJoinResults
+
+      -- * 'Token' options
+    , withTokIds, noTokIds
+    , withTokWmes, noTokWmes
+    , withTokWmesSymbolic, withTokWmesExplicit
+    , withTokParent, noTokParent
+    , withTokNode, noTokNode
+    , withTokChildren, noTokChildren
+    , withTokJoinResults, noTokJoinResults
+    , withTokNccResults, noTokNccResults
+    , withTokOwner, noTokOwner
+
+      -- * 'Amem' options
+    , withAmemFields, noAmemFields
+    , withAmemRefcount, noAmemRefcount
+    , withAmemWmes, noAmemWmes
+    , withAmemSuccessors, noAmemSuccessors
+
+      -- * Common Rete 'Node' options
+    , withNodeIds, noNodeIds
+
+      -- * Common unlinking options
+    , withUl, noUl
+
+      -- * 'Bmem' options
+    , withBmemToks, noBmemToks
+    , withBmemAllChildren, noBmemAllChildren
+
+      -- * 'JoinNode' options
+    , withJoinTests, noJoinTests
+    , withJoinAmems, noJoinAmems
+    , withJoinNearestAncestors, noJoinNearestAncestors
+
+      -- * 'NegativeNode' options
+    , withNegativeTests, noNegativeTests
+    , withNegativeAmems, noNegativeAmems
+    , withNegativeNearestAncestors, noNegativeNearestAncestors
+    , withNegativeToks, noNegativeToks
+
+      -- * 'NccNode' options
+    , withNccConjucts, noNccConjucts
+    , withNccPartners, noNccPartners
+
+      -- * 'NccPartner' options
+    , withNccNodes, noNccNodes
+    , withNccToks, noNccToks
+    , withNccNewResultBuffers, noNccNewResultBuffers
+
+      -- * 'PNode' options
+    , withPToks, noPToks
+    , withPLocations, noPLocations
+    )
+    where
 
 import           AI.Rete.Algo
 import           AI.Rete.Data
@@ -145,6 +233,10 @@ boundless :: VConf -> VConf
 boundless c = c { maxDepth = Nothing }
 {-# INLINE boundless #-}
 
+applyOswitch :: Oswitch -> VConf -> VConf
+applyOswitch oswitch c@Conf { opts = opts' } = c { opts = oswitch opts' }
+{-# INLINE applyOswitch #-}
+
 -- STM IMPL
 
 stmImpl :: Impl STM ShowS
@@ -259,6 +351,7 @@ defaultOpts =
   , oPToks                    = False
   , oPLocations               = False }
 
+-- | A composable option.
 type Oswitch = Opts -> Opts
 
 -- META OPTS.
@@ -300,10 +393,8 @@ withAmems = withWmeAmems . withNodeAmems
 noAmems   = noWmeAmems   . noNodeAmems
 
 withAllWmesSymbolic, withAllWmesExplicit :: Oswitch
-withAllWmesSymbolic = withWmesSymbolic
-                    . withTokWmesSymbolic
-withAllWmesExplicit = withWmesExplicit
-                    . withTokWmesExplicit
+withAllWmesSymbolic = withWmesSymbolic . withTokWmesSymbolic
+withAllWmesExplicit = withWmesExplicit . withTokWmesExplicit
 
 -- SPECIFIC OPTS.
 
@@ -921,3 +1012,31 @@ adjsJoinTest _ _ = return []
 unreachableCode :: a
 unreachableCode = error "Unreachable code. Impossible has happened!!!"
 {-# INLINE unreachableCode #-}
+
+-- PRINT IMPLEMENTATION
+
+-- | A mode of operating on Rete objects.
+data Mode = Net  -- ^ Emphasis on the structure of the network
+          | Data -- ^ Emphasis on the data stored insite the network.
+
+modeOswitch :: Mode -> Oswitch
+modeOswitch Net  = inNetMode
+modeOswitch Data = inDataMode
+{-# INLINE modeOswitch #-}
+
+-- | A specifier of depth of the treePrint process.
+type Depth = VConf -> VConf
+
+-- | Converts the selected object to a tree representation (expressed
+-- in ShowS).
+toShowS :: ToVn a => Mode -> Depth -> Oswitch -> a -> STM ShowS
+toShowS m d oswitch = printTree (switches conf) . toVn
+  where
+    switches = d                             -- finally depth
+             . applyOswitch (modeOswitch m)  -- next the mode
+             . applyOswitch oswitch          -- options come first
+
+-- | Works like toShowS, but returns String instead of ShowS
+toString :: ToVn a => Mode -> Depth -> Oswitch -> a -> STM String
+toString m d oswitch = liftM evalShowS . toShowS m d oswitch
+  where evalShowS s = s ""

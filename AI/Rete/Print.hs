@@ -70,12 +70,8 @@ leafPropVn :: ShowS -> [ShowVn] -> Vn
 leafPropVn name svns = propVn name (map leafVn svns)
 {- INLINE leafPropVn -}
 
-showS :: Show a => a -> ShowS
-showS = showString . show
-{-# INLINE showS #-}
-
 idS :: ID -> ShowS
-idS id' = compose [showS "-", showS id']
+idS id' = compose [showString "-", showString $ show id']
 {-# INLINE idS #-}
 
 withIdS :: ShowS -> ID -> ShowS
@@ -147,15 +143,6 @@ depth d c = c { maxDepth = Just d }
 boundless :: VConf -> VConf
 boundless c = c { maxDepth = Nothing }
 {-# INLINE boundless #-}
-
--- PRINTING STRINGS
-
-instance ShowM STM Opts Symbol where
-  showM Opts { oSymbolIds = ids } s =
-    if ids
-      then return (compose [ showString (show (getId s))
-                           , showString ('-':show s)])
-      else return (showString (show s))
 
 -- STM IMPL
 
@@ -485,20 +472,22 @@ showWme wme Opts { oWmeSymbolic = osymbolic, oWmeIds = oids } =
 {-# INLINE showWme #-}
 
 showWmeSymbolic :: Wme -> ShowS
-showWmeSymbolic wme = compose [showS "w", showS $ wmeId wme]
+showWmeSymbolic wme = compose [showString "w", shows $ wmeId wme]
 {-# INLINE showWmeSymbolic #-}
 
 showWmeExplicit :: Bool -> Wme -> ShowS
 showWmeExplicit oid
   Wme { wmeId = id', wmeObj = obj, wmeAttr = attr, wmeVal = val } =
     withOptIdS oid
-      (compose [ showS "(", showS obj,  showS ","
-               , showS attr, showS ",", showS val, showS ")"])
+      (compose [ showString "("
+               , shows obj,  showString ","
+               , shows attr, showString ",", shows val
+               , showString ")"])
       id'
 {-# INLINE showWmeExplicit #-}
 
 showWmeMaybe :: (Wme -> ShowS) -> Maybe Wme -> ShowS
-showWmeMaybe _ Nothing    = showS "_"
+showWmeMaybe _ Nothing    = showString "_"
 showWmeMaybe f (Just wme) = f wme
 {-# INLINE showWmeMaybe #-}
 
@@ -511,7 +500,7 @@ adjsWme
              , oWmeToks                = otoks
              , oWmeNegativeJoinResults = ojresults} = do
 
-    amemVn <- netPropVn  opts' oamems    "α mems" (readTVar amems)
+    amemVn <- netPropVn  opts' oamems    "amems" (readTVar amems)
     toksVn <- dataPropVn opts' otoks     "toks"   (readTVar toks)
     njrsVn <- dataPropVn opts' ojresults "neg. ⊳⊲ results (owners)"
               -- When visualizing the negative join results we only
@@ -531,7 +520,7 @@ instance ToVn Token where
 showTok :: Token -> Opts -> STM ShowS
 showTok
   DummyTopToken {}
-  Opts { oTokIds = oids } = return (withOptIdS oids (showS "{}") (-1))
+  Opts { oTokIds = oids } = return (withOptIdS oids (showString "{}") (-1))
 
 showTok
   tok
@@ -543,7 +532,7 @@ showTok
               then (if osymbolic
                     then showTokWmesSymbolic tok
                     else showTokWmesExplicit owmeids tok)
-              else showS "{..}"
+              else showString "{..}"
     return (withOptIdS oids s (tokId tok))
 {-# INLINE showTok #-}
 
@@ -557,7 +546,7 @@ showTokWmesExplicit owmeids = showTokWmes (showWmeExplicit owmeids)
 
 showTokWmes :: (Wme -> ShowS) -> Token -> ShowS
 showTokWmes f = rcompose
-              . intersperse (showS ",")
+              . intersperse (showString ",")
               . map (showWmeMaybe f)
               . tokWmes
 {-# INLINE showTokWmes #-}
@@ -616,20 +605,21 @@ showAmem
        , amemReferenceCount = rcount }
   Opts { oAmemFields        = ofields
        , oAmemRefcount      = orc } = do
-    let alpha = showS "α"
+    let alpha = showString "α"
     let repr  = if ofields
-                  then compose [alpha, showS " ("
-                                , sS obj,  showS ","
-                                , sS attr, showS ","
-                                , sS val,  showS ")"]
+                  then compose [alpha, showString " ("
+                                , sS obj,  showString ","
+                                , sS attr, showString ","
+                                , sS val
+                                ,  showString ")"]
                   else alpha
     if orc
       then (do rc <- readTVar rcount
-               return $ compose [repr, showS " :rc", showS rc])
+               return $ compose [repr, showString " refcount ", shows rc])
       else return repr
   where
-    sS s | s == wildcardSymbol = showS "*"
-         | otherwise           = showS s
+    sS s | s == wildcardSymbol = showString "*"
+         | otherwise           = shows s
 {-# INLINE showAmem #-}
 
 adjsAmem :: Amem -> Opts -> STM [Vn]
@@ -651,7 +641,7 @@ instance ToVn Node where
 
 showNode :: Node -> Opts -> STM ShowS
 showNode DummyTopNode {} Opts { oNodeIds = oids } =
-  return (withOptIdS oids (showS "DTN (β)") (-1))
+  return (withOptIdS oids (showString "DTN (β)") (-1))
 
 showNode node opts' = do
   let variant = nodeVariant node
@@ -698,7 +688,7 @@ adjsNode
 -- Bmem VISUALIZATION
 
 showBmem :: NodeVariant -> Opts -> STM ShowS
-showBmem _ _ = return (showS "β")
+showBmem _ _ = return (showString "β")
 {-# INLINE showBmem #-}
 
 adjsBmemLike :: TSet Token -> TSet Node -> Opts -> STM [Maybe Vn]
@@ -731,8 +721,8 @@ showJoinNode
   Opts     { oUl = oul } =
     if oul
       then (do mark <- ulMark lu ru
-               return (showS ('⊳':'⊲':' ':mark)))
-      else return (showS "⊳⊲")
+               return (showString ('⊳':'⊲':' ':mark)))
+      else return (showString "⊳⊲")
 
 showJoinNode _ _ = unreachableCode
 {-# INLINE showJoinNode #-}
@@ -769,7 +759,7 @@ adjsJoinNode
     ancestorVn <- netPropVn opts' oancestors "ancestor"
                   (joinAncestorM ancestor)
 
-    return [amemVn, testsVn, ancestorVn]
+    return [amemVn, ancestorVn, testsVn]
 
 adjsJoinNode _ _ = unreachableCode
 {-# INLINABLE adjsJoinNode #-}
@@ -787,8 +777,8 @@ showNegativeNode
   JoinNode { rightUnlinked = ru } Opts { oUl = oul } =
     if oul
       then (do mark <- ulSingleMark ru
-               return (showS ('¬':' ':mark)))
-      else return (showS "¬")
+               return (showString ('¬':' ':mark)))
+      else return (showString "¬")
 
 showNegativeNode _ _ = unreachableCode
 {-# INLINE showNegativeNode #-}
@@ -810,25 +800,43 @@ adjsNegativeNode
                   (joinAncestorM ancestor)
     toksVn     <- dataPropVn opts' otoks "toks" (readTVar toks)
 
-    return [amemVn, testsVn, ancestorVn, toksVn]
+    return [amemVn, ancestorVn, testsVn, toksVn]
 
 adjsNegativeNode _ _ = unreachableCode
 
--- NccNode/NccPartner VISUALIZATION
--- oNccConjucts
--- oNccPartners
--- oNccNodes
--- oNccToks
--- oNccNewResultBuffers
+-- NccNode VISUALIZATION
+
 showNccNode :: NodeVariant -> Opts -> STM ShowS
-showNccNode = undefined
+showNccNode NccNode {} _ = return (showString "Ncc")
+showNccNode _          _ = unreachableCode
+{-# INLINE showNccNode #-}
 
 adjsNccNode :: NodeVariant -> Opts -> STM [Maybe Vn]
-adjsNccNode = undefined
+adjsNccNode
+  NccNode    { nodeTokens = toks,  nccPartner   = partner }
+  opts'@Opts { oNccToks   = otoks, oNccPartners = opartners } = do
+    partnerVn <- netPropVn  opts' opartners "partner" (return [partner])
+    toksVn    <- dataPropVn opts' otoks     "toks"    (readTVar toks)
+
+    return [partnerVn, toksVn]
+
+adjsNccNode _ _ = unreachableCode
+{-# INLINE adjsNccNode #-}
+
+-- NccPartner VISUALIZATION
 
 showNccPartner :: NodeVariant -> Opts -> STM ShowS
-showNccPartner = undefined
+showNccPartner
+  NccPartner { nccPartnerNumberOfConjucts = conjs  }
+  Opts       { oNccConjucts               = oconjs } =
+    if oconjs
+      then return (compose [showString "Ncc (P) conjucts ", shows conjs])
+      else return (showString "Ncc (P)")
 
+showNccPartner _ _ = unreachableCode
+
+-- oNccNodes
+-- oNccNewResultBuffers
 adjsNccPartner :: NodeVariant -> Opts -> STM [Maybe Vn]
 adjsNccPartner = undefined
 
@@ -852,11 +860,11 @@ showJoinTest
   JoinTest { joinTestField1   = f1
            , joinTestField2   = f2
            , joinTestDistance = d } _ =
-    return (compose [ showS "⟨"
-                    , showS f1, showS ","
-                    , showS d,  showS ","
-                    , showS f2
-                    , showS "⟩"])
+    return (compose [ showString "⟨"
+                    , shows f1, showString ","
+                    , shows d,  showString ","
+                    , shows f2
+                    , showString "⟩"])
 {-# INLINE showJoinTest #-}
 
 adjsJoinTest :: JoinTest -> Opts -> STM [Vn]

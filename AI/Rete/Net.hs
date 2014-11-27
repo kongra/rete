@@ -157,7 +157,7 @@ buildOrShareBmem env parent = do
       tokens      <- newTVar Set.empty
       allChildren <- newTVar Set.empty
       node <- newNode env parent
-              Bmem { nodeTokens      = tokens
+              Bmem { nodeToks        = tokens
                    , bmemAllChildren = allChildren }
 
       -- Add node to parent's children
@@ -177,14 +177,6 @@ isPosCond PosStr  {} = True
 isPosCond PosS    {} = True
 isPosCond _          = False
 {-# INLINE isPosCond #-}
-
--- -- | Tells whether or not the Cond is a negative one.
--- isNegCond :: Cond -> Bool
--- isNegCond NegCond {} = True
--- isNegCond NegStr  {} = True
--- isNegCond NegS    {} = True
--- isNegCond _          = False
--- {-# INLINE isNegCond #-}
 
 -- | Tells whether or not the Cond is a Ncc cond.
 isNccCond :: Cond -> Bool
@@ -238,7 +230,7 @@ condsOrdering :: Cond -> Cond -> Ordering
 condsOrdering cond1 cond2
   | isPosCond cond1 = if isPosCond cond2 then EQ else GT
   | isNccCond cond1 = if isNccCond cond2 then EQ else LT
-  -- and for the NegativeCond ...
+  -- and for the NegCond ...
   | otherwise       = if isPosCond cond2 then LT else
                       if isNccCond cond2 then GT else EQ
 {-# INLINABLE condsOrdering #-}
@@ -331,7 +323,7 @@ findNearestAncestorWithSameAmem node amem =
          then Just node
          else findNearestAncestorWithSameAmem parent amem
 
-    NegativeNode {nodeAmem = a}
+    NegNode {nodeAmem = a}
       -> if amem == a
          then Just node
          else findNearestAncestorWithSameAmem parent amem
@@ -362,7 +354,7 @@ buildOrShareJoinNode env parent amem tests = do
     Just node -> return node
     Nothing   -> do
       -- Establish the unlinking stuff ...
-      unlinkRight <- nullTSet (vprop nodeTokens parent)
+      unlinkRight <- nullTSet (vprop nodeToks parent)
       ru          <- newTVar unlinkRight
       -- ... unlinking left only if the right ul. was not applied.
       unlinkLeft'    <- nullTSet (amemWmes amem)
@@ -398,18 +390,18 @@ buildOrShareJoinNode env parent amem tests = do
 
 -- NEGATIVE NODES
 
-isShareableNegativeNode :: Amem -> [JoinTest] -> Node -> Bool
-isShareableNegativeNode amem tests node =
-  isNegativeNode node
+isShareableNegNode :: Amem -> [JoinTest] -> Node -> Bool
+isShareableNegNode amem tests node =
+  isNegNode node
   && amem  == vprop nodeAmem  node
   && tests == vprop joinTests node
-{-# INLINABLE isShareableNegativeNode #-}
+{-# INLINABLE isShareableNegNode #-}
 
-buildOrShareNegativeNode :: Env -> Node -> Amem -> [JoinTest] -> STM Node
-buildOrShareNegativeNode env parent amem tests = do
+buildOrShareNegNode :: Env -> Node -> Amem -> [JoinTest] -> STM Node
+buildOrShareNegNode env parent amem tests = do
   parentChildren <- readTVar (nodeChildren parent)
   let matchingOneOf = headMay
-                      . filter (isShareableNegativeNode amem tests)
+                      . filter (isShareableNegNode amem tests)
                       . toList
   case matchingOneOf parentChildren of
     Just node -> return node
@@ -419,11 +411,11 @@ buildOrShareNegativeNode env parent amem tests = do
       toks <- newTVar Set.empty
       ru   <- newTVar False
       node <- newNode env parent
-              NegativeNode { nodeTokens                  = toks
-                           , nodeAmem                    = amem
-                           , nearestAncestorWithSameAmem = ancestor
-                           , joinTests                   = tests
-                           , rightUnlinked               = ru }
+              NegNode { nodeToks                    = toks
+                      , nodeAmem                    = amem
+                      , nearestAncestorWithSameAmem = ancestor
+                      , joinTests                   = tests
+                      , rightUnlinked               = ru }
 
       -- Insert node at the head of parent.children
       writeTVar (nodeChildren parent) $! node Seq.<| parentChildren
@@ -437,11 +429,11 @@ buildOrShareNegativeNode env parent amem tests = do
       updateNewNodeWithMatchesFromAbove env node
 
       -- Right unlink, but only after updating from above.
-      whenM (nullTSet (vprop nodeTokens node)) $
+      whenM (nullTSet (vprop nodeToks node)) $
         rightUnlink node amem
 
       return node
-{-# INLINABLE buildOrShareNegativeNode #-}
+{-# INLINABLE buildOrShareNegNode #-}
 
 -- NCC NODES CREATION
 
@@ -471,11 +463,11 @@ buildOrShareNccNodes env parent (NccCond subconds) earlierConds = do
       partner <- newNode env bottomOfSubnetwork
                  NccPartner { nccPartnerNccNode          = nccNode
                             , nccPartnerNumberOfConjucts = length subconds
-                            , nccPartnerNewResultBuffer  = newResultBuff }
+                            , nccPartnerNewResultBuff    = newResultBuff }
 
       toks <- newTVar Set.empty
       new  <- newNode env parent
-              NccNode { nodeTokens = toks
+              NccNode { nodeToks   = toks
                       , nccPartner = partner }
 
       -- Bind new to the partner.
@@ -530,7 +522,7 @@ buildOrShareNetworkForConditions env parent (c:cs) earlierConds = do
     (NegCond obj attr val) -> do
       let tests   =  joinTestsFromCondition c earlierConds
       amem        <- buildOrShareAmem env obj attr val
-      currentNode <- buildOrShareNegativeNode env parent amem tests
+      currentNode <- buildOrShareNegNode env parent amem tests
       buildOrShareNetworkForConditions env currentNode
         cs updatedEarlierConds
 
@@ -553,10 +545,10 @@ updateNewNodeWithMatchesFromAbove _ DummyTopNode {} =
 updateNewNodeWithMatchesFromAbove env node = do
   let parent = nodeParent node
   case nodeVariant parent of
-    Bmem {nodeTokens = toks} -> forMM_ (toListT toks) $ \tok ->
+    Bmem {nodeToks = toks} -> forMM_ (toListT toks) $ \tok ->
       leftActivate env tok Nothing node
 
-    DTN {} -> leftActivate env (envDummyTopToken env) Nothing node
+    DTN {} -> leftActivate env (envDummyTopTok env) Nothing node
 
     JoinNode {} -> do
       savedChildren <- readTVar (nodeChildren parent)
@@ -565,13 +557,13 @@ updateNewNodeWithMatchesFromAbove env node = do
         rightActivate env wme parent
       writeTVar (nodeChildren parent) savedChildren
 
-    NegativeNode {} ->
-      forMM_ (toListT (vprop nodeTokens parent)) $ \tok ->
+    NegNode {} ->
+      forMM_ (toListT (vprop nodeToks parent)) $ \tok ->
         whenM (nullTSet (tokNegJoinResults tok)) $
           leftActivate env tok Nothing node
 
     NccNode {} ->
-      forMM_ (toListT (vprop nodeTokens parent)) $ \tok ->
+      forMM_ (toListT (vprop nodeToks parent)) $ \tok ->
         whenM (nullTSet (tokNccResults tok)) $
           leftActivate env tok Nothing node
 
@@ -591,12 +583,13 @@ addProduction env conds action revokeAction = do
   -- positive conds in front.
   cconds <- liftM sortConds (mapM (canonicalCond env) conds)
   parent <- buildOrShareNetworkForConditions env
-              (envDummyTopNode env) cconds []
+            (envDummyTopNode env) cconds []
 
   let vbindings = variableBindingsForConds cconds
+
   toks <- newTVar Set.empty
   node <- newNode env parent
-          PNode { nodeTokens            = toks
+          PNode { nodeToks              = toks
                 , pnodeAction           = action
                 , pnodeRevokeAction     = revokeAction
                 , pnodeVariableBindings = vbindings}
@@ -662,20 +655,20 @@ valA Actx {actxNode = node, actxWmes = wmes} s =
 
 -- DELETING NODES
 
-hasDeletableNodeTokens :: Node -> Bool
-hasDeletableNodeTokens node = case nodeVariant node of
-  Bmem         {} -> True
-  NegativeNode {} -> True
-  NccNode      {} -> True
-  PNode        {} -> True  -- Extend this with new variants if necessary.
-  _               -> False
-{-# INLINE hasDeletableNodeTokens #-}
+hasDeletableNodeToks :: Node -> Bool
+hasDeletableNodeToks node = case nodeVariant node of
+  Bmem    {} -> True
+  NegNode {} -> True
+  NccNode {} -> True
+  PNode   {} -> True  -- Extend this with new variants if necessary.
+  _          -> False
+{-# INLINE hasDeletableNodeToks #-}
 
 hasNodeAmem :: Node -> Bool
 hasNodeAmem node = case nodeVariant node of
-  JoinNode {}     -> True
-  NegativeNode {} -> True
-  _               -> False
+  JoinNode {} -> True
+  NegNode  {} -> True
+  _           -> False
 {-# INLINE hasNodeAmem #-}
 
 notLeftUnlinked :: Node -> STM Bool
@@ -693,18 +686,18 @@ deleteNodeAndAnyUnusedAncestor env node@Node {} = do
     deleteNodeAndAnyUnusedAncestor env (vprop nccPartner node)
 
   -- Clean up any tokens the node contains.
-  when (hasDeletableNodeTokens node) $
-    forMM_ (toListT (vprop nodeTokens node)) $ \tok ->
+  when (hasDeletableNodeToks node) $
+    forMM_ (toListT (vprop nodeToks node)) $ \tok ->
       -- When removing the token we remove it both from its wme and
       -- its parent (tok).
-      deleteTokenAndDescendents env True True tok
+      deleteTokAndDescendents env True True tok
 
   -- Do special cleanup in NccPartner.
   when (isNccPartner node) $
-    forMM_ (toListT (vprop nccPartnerNewResultBuffer node)) $ \tok ->
+    forMM_ (toListT (vprop nccPartnerNewResultBuff node)) $ \tok ->
       -- When removing the token we remove it both from its wme and
       -- its parent (tok).
-      deleteTokenAndDescendents env True True tok
+      deleteTokAndDescendents env True True tok
 
   -- Deal with the α memory.
   when (hasNodeAmem node) $

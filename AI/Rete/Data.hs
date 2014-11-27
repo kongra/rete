@@ -41,9 +41,9 @@ module AI.Rete.Data
     , NodeVariant (..)
 
       -- * (Internal) data Rete operates on
-    , Token              (..)
-    , Wme                (..)
-    , NegativeJoinResult (..)
+    , Tok           (..)
+    , Wme           (..)
+    , NegJoinResult (..)
 
       -- * (Internal) indexes and registries
     , WmesIndex
@@ -51,7 +51,7 @@ module AI.Rete.Data
     , SymbolsRegistry
 
       -- * (Internal) data used during joins and (more generally)
-      -- accessing information inside 'Token's and 'Wme's
+      -- accessing information inside 'Tok's and 'Wme's
     , JoinTest       (..)
     , SymbolLocation (..)
     , Field          (..)
@@ -114,8 +114,8 @@ data Env =
   , envAmems :: !(TVar AmemsRegistry)
 
     -- | Dummies
-  , envDummyTopNode  :: !Node
-  , envDummyTopToken :: !Token
+  , envDummyTopNode :: !Node
+  , envDummyTopTok  :: !Tok
 
     -- | Defined productions
   , envProductions :: !(TSet Node)
@@ -135,11 +135,11 @@ data Wme =
     -- | α-memories this Wme belongs to (8 at most)
   , wmeAmems :: !(TList Amem)
 
-    -- | Tokens with tokenWme = this wme.
-  , wmeTokens :: !(TSet Token)
+    -- | Toks with tokenWme = this wme.
+  , wmeToks :: !(TSet Tok)
 
-    -- | Negative join results in which this wme participates
-  , wmeNegJoinResults :: !(TSet NegativeJoinResult)
+    -- | Neg join results in which this Wme participates
+  , wmeNegJoinResults :: !(TSet NegJoinResult)
   }
 
 instance Show Wme where
@@ -152,53 +152,53 @@ instance Eq Wme where
 instance Hashable Wme where
   hashWithSalt salt wme = salt `hashWithSalt` wmeId wme
 
--- | Token.
-data Token =
-  Token
+-- | Tok.
+data Tok =
+  Tok
   {
     -- | An internal identifier of the token
     tokId :: !ID
 
     -- | Points to a higher token
-  , tokParent :: !Token
+  , tokParent :: !Tok
 
-    -- | i-th Wme, Nothing for some tokens
+    -- | i-th Wme, Nothing for some toks
   , tokWme :: !(Maybe Wme)
 
     -- | The node the token is in
   , tokNode :: !Node
 
-    -- | The Tokens with parent = this
-  , tokChildren :: !(TSet Token)
+    -- | The Toks with parent = this
+  , tokChildren :: !(TSet Tok)
 
-    -- | Used only for Tokens in negative nodes
-  , tokNegJoinResults :: !(TSet NegativeJoinResult)
+    -- | Used only for Toks in negative nodes
+  , tokNegJoinResults :: !(TSet NegJoinResult)
 
     -- | Similar to tokNegJoinResults but for NCC nodes
-  , tokNccResults :: !(TSet Token)
+  , tokNccResults :: !(TSet Tok)
 
-    -- | On Tokens in NCC partners: tokens in whose local memory this
+    -- | On Toks in NCC partners: toks in whose local memory this
     -- result resides
-  , tokOwner :: !(TVar (Maybe Token))
+  , tokOwner :: !(TVar (Maybe Tok))
   }
   |
-  DummyTopToken
+  DummyTopTok
   {
     -- | The node the token is in - DummyTopNode
     tokNode :: !Node
 
-    -- | The Tokens with parent = this
-  , tokChildren :: !(TSet Token)
+    -- | The Toks with parent = this
+  , tokChildren :: !(TSet Tok)
   }
 
-instance Eq Token where
-  Token {tokId = id1} == Token {tokId = id2} = id1 == id2
-  DummyTopToken {}    == DummyTopToken {}    = True
+instance Eq Tok where
+  Tok {tokId = id1} == Tok {tokId = id2} = id1 == id2
+  DummyTopTok {}    == DummyTopTok {}    = True
   _ == _ = False
 
-instance Hashable Token where
-  hashWithSalt salt (Token {tokId = id'}) = salt `hashWithSalt` id'
-  hashWithSalt salt (DummyTopToken {})    = salt `hashWithSalt` ((-1) :: ID)
+instance Hashable Tok where
+  hashWithSalt salt (Tok {tokId = id'}) = salt `hashWithSalt` id'
+  hashWithSalt salt (DummyTopTok {})    = salt `hashWithSalt` ((-1) :: ID)
 
 -- | Field
 data Field = Obj | Attr | Val deriving (Show, Eq)
@@ -230,8 +230,8 @@ data Amem =
   }
 
 instance Eq Amem where
-  Amem {amemObj = obj1, amemAttr = attr1, amemVal = val1} ==
-    Amem {amemObj = obj2, amemAttr = attr2, amemVal = val2} =
+  Amem   { amemObj = obj1, amemAttr = attr1, amemVal = val1 } ==
+    Amem { amemObj = obj2, amemAttr = attr2, amemVal = val2 } =
       obj1 == obj2 && attr1 == attr2 && val1 == val2
 
 -- | Node with Variants
@@ -272,8 +272,8 @@ instance Hashable Node where
 data NodeVariant =
   DTN
   {
-    -- | Like in a β memory, but contains only a single DummyTopToken.
-    nodeTokens :: !(TSet Token)
+    -- | Like in a β memory, but contains only a single DummyTopTok.
+    nodeToks :: !(TSet Tok)
 
     -- | Like in a β memory (see below)
   , bmemAllChildren :: !(TSet Node)
@@ -281,7 +281,7 @@ data NodeVariant =
   |
   Bmem
   {
-    nodeTokens :: !(TSet Token)
+    nodeToks :: !(TSet Tok)
 
     -- | With left unlinking, we need this list to be able to find and
     -- share also the currently left-unlinked nodes.
@@ -300,9 +300,9 @@ data NodeVariant =
   , rightUnlinked :: !(TVar Bool)
   }
   |
-  NegativeNode
+  NegNode
   {
-    nodeTokens :: !(TSet Token)
+    nodeToks :: !(TSet Tok)
 
     -- | The α memory this node is attached to (like for JoinNode)
   , nodeAmem :: !Amem
@@ -316,7 +316,7 @@ data NodeVariant =
   |
   NccNode
   {
-    nodeTokens :: !(TSet Token)
+    nodeToks   :: !(TSet Tok)
   , nccPartner :: !Node  -- ^ with NCCPartner variant
   }
   |
@@ -329,12 +329,12 @@ data NodeVariant =
   , nccPartnerNumberOfConjucts :: !Int
 
     -- | Results for the match the NCC node hasn't heard about
-  , nccPartnerNewResultBuffer :: !(TSet Token)
+  , nccPartnerNewResultBuff :: !(TSet Tok)
   }
   |
   PNode
   {
-    nodeTokens :: !(TSet Token)
+    nodeToks :: !(TSet Tok)
 
     -- | The action to fire on activation
   , pnodeAction :: !Action
@@ -346,7 +346,7 @@ data NodeVariant =
   , pnodeVariableBindings :: !VariableBindings
   }
 
--- | A distance for describing locations of symbols in tokens.
+-- | A distance for describing locations of symbols in Toks.
 type Distance = Int
 
 -- | JoinTest
@@ -359,21 +359,21 @@ data JoinTest =
   }
   deriving Eq
 
--- | NegativeJoinResult
-data NegativeJoinResult =
-  NegativeJoinResult
+-- | NegJoinResult
+data NegJoinResult =
+  NegJoinResult
   {
-    negativeJoinResultOwner :: !Token
+    negativeJoinResultOwner :: !Tok
   , negativeJoinResultWme   :: !Wme
   }
   deriving (Eq)
 
-instance Hashable NegativeJoinResult where
-  hashWithSalt salt (NegativeJoinResult owner wme) =
+instance Hashable NegJoinResult where
+  hashWithSalt salt (NegJoinResult owner wme) =
     salt `hashWithSalt` owner `hashWithSalt` wme
 
 -- | SymbolLocation describes the binding for a variable within a token.
-data SymbolLocation = SymbolLocation !Field !Distance
+data SymbolLocation = SymbolLocation !Field !Distance deriving Show
 
 -- | A map of variable bindings for productions
 type VariableBindings = Map.HashMap Symbol SymbolLocation
@@ -384,7 +384,7 @@ data Actx =
   {
     actxEnv  :: !Env         -- ^ Current Env
   , actxNode :: !Node        -- ^ Production node
-  , actxTok  :: !Token       -- ^ The matching token
+  , actxTok  :: !Tok         -- ^ The matching token
   , actxWmes :: [Maybe Wme]  -- ^ The token Wmes
   }
 
@@ -419,7 +419,7 @@ data Cond =
   | PosS    !S      !S      !S
   | PosCond !Symbol !Symbol !Symbol -- canonical form
 
-  -- Negative conds
+  -- Neg conds
   | NegStr  !String !String !String
   | NegS    !S      !S      !S
   | NegCond !Symbol !Symbol !Symbol -- canonical form

@@ -55,13 +55,17 @@ module AI.Rete.Algo
 
       -- * (Internal) 'NodeVariant' predicates
     , isJoinNode
-    , isNegativeNode
+    , isNegNode
     , isNccNode
     , isNccPartner
 
       -- * (Internal) data manipulation
     , wmesIndexInsert
-    , deleteTokenAndDescendents
+    , deleteTokAndDescendents
+
+      -- * (Internal) debugging
+    , trace
+    , traceM
     )
     where
 
@@ -75,6 +79,7 @@ import qualified Data.HashSet as Set
 import           Data.Maybe (isJust, fromJust)
 import qualified Data.Sequence as Seq
 import           Data.Typeable
+import           Debug.Trace (traceM, trace)
 import           Kask.Control.Monad (whenM, unlessM, mapMM_, forMM_, toListM)
 import           Kask.Data.Sequence (insertBeforeFirstOccurence,
                                      removeFirstOccurence)
@@ -117,12 +122,12 @@ isJoinNode node = case nodeVariant node of
   _             -> False
 {-# INLINE isJoinNode #-}
 
--- | Returns True iff the node is a NegativeNode.
-isNegativeNode :: Node -> Bool
-isNegativeNode node = case nodeVariant node of
-  (NegativeNode {}) -> True
-  _                 -> False
-{-# INLINE isNegativeNode #-}
+-- | Returns True iff the node is a NegNode.
+isNegNode :: Node -> Bool
+isNegNode node = case nodeVariant node of
+  (NegNode {}) -> True
+  _            -> False
+{-# INLINE isNegNode #-}
 
 -- | Returns True iff the node is a Ncc node.
 isNccNode :: Node -> Bool
@@ -147,9 +152,9 @@ instance WithId Symbol where
 
 instance WithId Wme where getId Wme {wmeId = id'} = id'
 
-instance WithId Token where
-  getId Token         {tokId = id'} = id'
-  getId DummyTopToken {}            = -1
+instance WithId Tok where
+  getId Tok         {tokId = id'} = id'
+  getId DummyTopTok {}            = -1
 
 instance WithId Node where
   getId Node         {nodeId = id'} = id'
@@ -171,16 +176,16 @@ createEnv = do
 
   -- Initialize dummies
   dummyNodeChildren    <- newTVar Seq.empty
-  dummyNodeTokens      <- newTVar Set.empty
+  dummyNodeToks        <- newTVar Set.empty
   dummyNodeAllChildren <- newTVar Set.empty
   dummyTokChildren     <- newTVar Set.empty
 
-  let dummyVariant = DTN           dummyNodeTokens   dummyNodeAllChildren
-      dummyNode    = DummyTopNode  dummyNodeChildren dummyVariant
-      dummyTok     = DummyTopToken dummyNode         dummyTokChildren
+  let dummyVariant = DTN          dummyNodeToks     dummyNodeAllChildren
+      dummyNode    = DummyTopNode dummyNodeChildren dummyVariant
+      dummyTok     = DummyTopTok  dummyNode         dummyTokChildren
 
   -- Make the dummy token the only member of dummyNode.tokens
-  modifyTVar' dummyNodeTokens (Set.insert dummyTok)
+  modifyTVar' dummyNodeToks (Set.insert dummyTok)
 
   return Env { envId              = id'
              , envSymbolsRegistry = symbols
@@ -190,7 +195,7 @@ createEnv = do
              , envWmesByVal       = vals
              , envAmems           = amems
              , envDummyTopNode    = dummyNode
-             , envDummyTopToken   = dummyTok
+             , envDummyTopTok     = dummyTok
              , envProductions     = prods }
 {-# INLINABLE createEnv #-}
 
@@ -433,77 +438,77 @@ createWme env obj attr val = do
              , wmeAttr           = attr
              , wmeVal            = val
              , wmeAmems          = amems
-             , wmeTokens         = toks
+             , wmeToks           = toks
              , wmeNegJoinResults = njResults }
 {-# INLINE createWme #-}
 
 -- TOKENS CREATION AND UTILS
 
-makeToken :: Env -> Token -> Maybe Wme -> Node -> STM Token
-makeToken env parentTok wme node = do
+makeTok :: Env -> Tok -> Maybe Wme -> Node -> STM Tok
+makeTok env parentTok wme node = do
   id'        <- genid   env
   children   <- newTVar Set.empty
   njResults  <- newTVar Set.empty
   nccResults <- newTVar Set.empty
   owner      <- newTVar Nothing
 
-  let tok = Token { tokId             = id'
-                  , tokParent         = parentTok
-                  , tokWme            = wme
-                  , tokNode           = node
-                  , tokChildren       = children
-                  , tokNegJoinResults = njResults
-                  , tokNccResults     = nccResults
-                  , tokOwner          = owner}
+  let tok = Tok { tokId             = id'
+                , tokParent         = parentTok
+                , tokWme            = wme
+                , tokNode           = node
+                , tokChildren       = children
+                , tokNegJoinResults = njResults
+                , tokNccResults     = nccResults
+                , tokOwner          = owner}
 
   -- Add tok to parentTok.children (for tree-based removal)
   modifyTVar' (tokChildren parentTok) (Set.insert tok)
 
   when (isJust wme)
     -- Add tok to wme.tokens (for tree-based-removal)
-    (modifyTVar' (wmeTokens (fromJust wme)) (Set.insert tok))
+    (modifyTVar' (wmeToks (fromJust wme)) (Set.insert tok))
 
   return tok
-{-# INLINABLE makeToken #-}
+{-# INLINABLE makeTok #-}
 
 -- | Creates a token and adds it to the node.
-makeAndInsertToken :: Env -> Token -> Maybe Wme -> Node -> STM Token
-makeAndInsertToken env tok wme node = do
-  newTok <- makeToken env tok wme node
-  modifyTVar' (vprop nodeTokens node) (Set.insert newTok)
+makeAndInsertTok :: Env -> Tok -> Maybe Wme -> Node -> STM Tok
+makeAndInsertTok env tok wme node = do
+  newTok <- makeTok env tok wme node
+  modifyTVar' (vprop nodeToks node) (Set.insert newTok)
   return newTok
-{-# INLINABLE makeAndInsertToken #-}
+{-# INLINABLE makeAndInsertTok #-}
 
 -- | Returns a sequence of wmes within the token. Every wme wrapped in
 -- a Maybe instance due to the fact that some tokens do not carry on
 -- any wme.
-tokWmes :: Token -> [Maybe Wme]
+tokWmes :: Tok -> [Maybe Wme]
 tokWmes = map tokWme . tokWithAncestors
 {-# INLINE tokWmes #-}
 
--- | Returns the parent of the token. Stays aware of the Dummy Top Token.
-safeTokParent :: Token -> Maybe Token
-safeTokParent Token {tokParent = parent} = Just parent
-safeTokParent DummyTopToken {}           = Nothing
+-- | Returns the parent of the token. Stays aware of the Dummy Top Tok.
+safeTokParent :: Tok -> Maybe Tok
+safeTokParent Tok {tokParent = parent} = Just parent
+safeTokParent DummyTopTok {}           = Nothing
 {-# INLINE safeTokParent #-}
 
-safeMaybeTokParent :: Maybe Token -> Maybe Token
+safeMaybeTokParent :: Maybe Tok -> Maybe Tok
 safeMaybeTokParent Nothing = Nothing
 safeMaybeTokParent (Just tok) = safeTokParent tok
 {-# INLINE safeMaybeTokParent #-}
 
 -- | Returns a sequence of tokens starting with the argument and
 -- following the parent(ship) relation.
-tokWithAncestors :: Token -> [Token]
+tokWithAncestors :: Tok -> [Tok]
 tokWithAncestors = map fromJust             -- safely strip-off Just
-                   . init                   -- strip off Dummy Top Token
-                   . takeWhile isJust       -- to avoid going into Nothings
-                   . iterate safeMaybeTokParent
-                   . Just
+                 . init                   -- strip off Dummy Top Tok
+                 . takeWhile isJust       -- to avoid going into Nothings
+                 . iterate safeMaybeTokParent
+                 . Just
 {-# INLINABLE tokWithAncestors #-}
 
 -- | A safe (Maybe-aware) version of token wme accessor.
-safeTokWme :: Maybe Token -> Maybe Wme
+safeTokWme :: Maybe Tok -> Maybe Wme
 safeTokWme Nothing    = Nothing
 safeTokWme (Just tok) = tokWme tok
 {-# INLINE safeTokWme #-}
@@ -513,31 +518,31 @@ safeTokWme (Just tok) = tokWme tok
 -- | Right-activates the node with the passed wme
 rightActivate :: Env -> Wme -> Node -> STM ()
 rightActivate env wme node = case nodeVariant node of
-  JoinNode     {} -> rightActivateJoinNode     env wme node
-  NegativeNode {} -> rightActivateNegativeNode env wme node
-  _               -> error "Illegal Node used to rightActivate"
+  JoinNode {} -> rightActivateJoinNode     env wme node
+  NegNode  {} -> rightActivateNegNode env wme node
+  _           -> error "Illegal Node used to rightActivate"
 {-# INLINABLE rightActivate #-}
 
 -- LEFT ACTIVATION DISPATCH
 
 -- | Left-activates the node
-leftActivate :: Env -> Token -> Maybe Wme -> Node -> STM ()
+leftActivate :: Env -> Tok -> Maybe Wme -> Node -> STM ()
 leftActivate env tok wme node = case nodeVariant node of
-  Bmem         {} -> leftActivateBmem         env tok wme node
-  JoinNode     {} -> leftActivateJoinNode     env tok wme node
-  NegativeNode {} -> leftActivateNegativeNode env tok wme node
-  NccNode      {} -> leftActivateNccNode      env tok wme node
-  NccPartner   {} -> leftActivateNccPartner   env tok wme node
-  PNode        {} -> leftActivatePNode        env tok wme node
-  DTN          {} -> error "Can't happen, nobody activates Dummy Top Node."
+  Bmem       {} -> leftActivateBmem       env tok wme node
+  JoinNode   {} -> leftActivateJoinNode   env tok wme node
+  NegNode    {} -> leftActivateNegNode    env tok wme node
+  NccNode    {} -> leftActivateNccNode    env tok wme node
+  NccPartner {} -> leftActivateNccPartner env tok wme node
+  PNode      {} -> leftActivatePNode      env tok wme node
+  DTN        {} -> error "Can't happen, nobody activates Dummy Top Node."
 {-# INLINABLE leftActivate #-}
 
 -- β MEMORIES
 
 leftActivateBmem ::
-  Env -> Token -> Maybe Wme -> Node -> STM ()
+  Env -> Tok -> Maybe Wme -> Node -> STM ()
 leftActivateBmem env tok wme node = do
-  newTok <- makeAndInsertToken env tok wme node
+  newTok <- makeAndInsertTok env tok wme node
 
   -- Left-activate children (solely JoinNodes, do not pass any wme)
   mapMM_ (leftActivate env newTok Nothing) (toListT (nodeChildren node))
@@ -548,11 +553,11 @@ leftActivateBmem env tok wme node = do
 -- | Performs the join tests not using any kind of indexing. Useful
 -- while right-activation, when the α memory passes a single wme, so
 -- there is no use of the α memory indexing.
-performJoinTests :: [JoinTest] -> Token -> Wme -> Bool
+performJoinTests :: [JoinTest] -> Tok -> Wme -> Bool
 performJoinTests tests tok wme = all (passJoinTest tok wme) tests
 {-# INLINE performJoinTests #-}
 
-passJoinTest :: Token -> Wme -> JoinTest -> Bool
+passJoinTest :: Tok -> Wme -> JoinTest -> Bool
 passJoinTest tok wme test = value1 == value2
   where
     value1    = fieldValue (joinTestField1 test) wme
@@ -572,7 +577,7 @@ fieldValue Val  = wmeVal
 -- INDEXED JOIN TESTS (USING α MEMORY INDEXES)
 
 -- | Matches a token to wmes in an α memory using the α memory indexes.
-matchingAmemWmes :: [JoinTest] -> Token -> Amem -> STM [Wme]
+matchingAmemWmes :: [JoinTest] -> Tok -> Amem -> STM [Wme]
 -- When no tests specified, we simply take all wmes from the α memory
 matchingAmemWmes [] _ amem = toListT (amemWmes amem)
 matchingAmemWmes tests tok amem = do
@@ -601,7 +606,7 @@ amemWmesForTest wmes amem test = do
 -- JOIN NODES
 
 leftActivateJoinNode ::
-  Env -> Token -> Maybe Wme -> Node -> STM ()
+  Env -> Tok -> Maybe Wme -> Node -> STM ()
 leftActivateJoinNode env tok _ node = do
   let amem   = vprop nodeAmem node
       parent = nodeParent node
@@ -632,7 +637,7 @@ rightActivateJoinNode env wme node = do
   let amem   = vprop nodeAmem node
       parent = nodeParent node
 
-  isParentEmpty <- nullTSet (vprop nodeTokens parent)
+  isParentEmpty <- nullTSet (vprop nodeToks parent)
 
   -- When node.amem just became non-empty (equivalently testing for
   -- the left-unlinked flag)
@@ -646,7 +651,7 @@ rightActivateJoinNode env wme node = do
   unless isParentEmpty $ do
     children <- readTVar (nodeChildren node)
     unless (Seq.null children) $ do
-      parentToks <- rvprop nodeTokens parent
+      parentToks <- rvprop nodeToks parent
       unless (Set.null parentToks) $ do
         let tests = vprop joinTests node
             wme'  = Just wme
@@ -658,16 +663,16 @@ rightActivateJoinNode env wme node = do
 
 -- NEGATIVE NODES
 
-leftActivateNegativeNode ::
-  Env -> Token -> Maybe Wme -> Node -> STM ()
-leftActivateNegativeNode env tok wme node = do
+leftActivateNegNode ::
+  Env -> Tok -> Maybe Wme -> Node -> STM ()
+leftActivateNegNode env tok wme node = do
   whenM (isRightUnlinked node) $
     -- The rightUnlinked status must be checked here because a
     -- negative node is not right unlinked on creation.
-    whenM (nullTSet (vprop nodeTokens node)) $ relinkToAlphaMemory node
+    whenM (nullTSet (vprop nodeToks node)) $ relinkToAlphaMemory node
 
   -- Build a new token and store it just like a β memory would
-  newTok <- makeAndInsertToken env tok wme node
+  newTok <- makeAndInsertTok env tok wme node
 
   let amem = vprop nodeAmem node
 
@@ -675,7 +680,7 @@ leftActivateNegativeNode env tok wme node = do
   unlessM (nullTSet (amemWmes amem)) $ do
     wmes <- matchingAmemWmes (vprop joinTests node) newTok amem
     forM_ wmes $ \wme' -> do
-      let jr = NegativeJoinResult newTok wme'
+      let jr = NegJoinResult newTok wme'
       modifyTVar' (tokNegJoinResults newTok) (Set.insert jr)
       modifyTVar' (wmeNegJoinResults wme')   (Set.insert jr)
       -- In the original Doorenbos pseudo-code there was a bug - wme
@@ -684,35 +689,35 @@ leftActivateNegativeNode env tok wme node = do
   -- If join results are empty, then inform children
   unlessM (nullTSet (tokNegJoinResults newTok)) $
     mapMM_ (leftActivate env newTok Nothing) (toListT (nodeChildren node))
-{-# INLINABLE leftActivateNegativeNode #-}
+{-# INLINABLE leftActivateNegNode #-}
 
-rightActivateNegativeNode :: Env -> Wme -> Node -> STM ()
-rightActivateNegativeNode env wme node  = do
-  toks <- rvprop nodeTokens node
+rightActivateNegNode :: Env -> Wme -> Node -> STM ()
+rightActivateNegNode env wme node  = do
+  toks <- rvprop nodeToks node
   unless (Set.null toks) $ do
     let tests = vprop joinTests node
     forM_ (Set.toList toks) $ \tok ->
       when (performJoinTests tests tok wme) $ do
         emptyjrs <- nullTSet (tokNegJoinResults tok)
-        when emptyjrs (deleteDescendentsOfToken env tok)
+        when emptyjrs (deleteDescendentsOfTok env tok)
 
-        let jr = NegativeJoinResult tok wme
+        let jr = NegJoinResult tok wme
         -- insert jr into tok.(neg)join-results
         modifyTVar' (tokNegJoinResults tok) (Set.insert jr)
         -- insert jr into wme.neg-join-results
         modifyTVar' (wmeNegJoinResults wme) (Set.insert jr)
-{-# INLINABLE rightActivateNegativeNode #-}
+{-# INLINABLE rightActivateNegNode #-}
 
 -- Ncc NODES
 
 leftActivateNccNode ::
-  Env -> Token -> Maybe Wme -> Node -> STM ()
+  Env -> Tok -> Maybe Wme -> Node -> STM ()
 leftActivateNccNode env tok wme node = do
   -- Build and store a new token.
-  newTok <- makeAndInsertToken env tok wme node
+  newTok <- makeAndInsertTok env tok wme node
   let partner = vprop nccPartner node
 
-  newResultBuffer <- rvprop nccPartnerNewResultBuffer partner
+  newResultBuffer <- rvprop nccPartnerNewResultBuff partner
 
   -- It is true that during the algorithm the assignment takes place:
   -- new-token.ncc-results ← node.partner.new-result-buffer,
@@ -723,7 +728,7 @@ leftActivateNccNode env tok wme node = do
   writeTVar (tokNccResults newTok) $! newTokNccResults
 
   -- Clear the node.partner.new-result-buffer
-  writeTVar (vprop nccPartnerNewResultBuffer partner) $! Set.empty
+  writeTVar (vprop nccPartnerNewResultBuff partner) $! Set.empty
 
   -- Update result.owner ← new-token
   let jnewTok = Just newTok
@@ -738,10 +743,10 @@ leftActivateNccNode env tok wme node = do
 -- Ncc PARNTER NODES
 
 leftActivateNccPartner ::
-  Env -> Token -> Maybe Wme -> Node -> STM ()
+  Env -> Tok -> Maybe Wme -> Node -> STM ()
 leftActivateNccPartner env tok wme partner = do
   nccNode   <- rvprop nccPartnerNccNode partner
-  newResult <- makeToken env tok wme partner
+  newResult <- makeTok env tok wme partner
 
   -- Find appropriate owner token (into whose local memory we should
   -- put the new result).
@@ -755,24 +760,24 @@ leftActivateNccPartner env tok wme partner = do
       -- Add newResult to owner's local memory and propagate further.
       modifyTVar' (tokNccResults owner') (Set.insert newResult)
       writeTVar   (tokOwner newResult) $! owner
-      deleteDescendentsOfToken env owner'
+      deleteDescendentsOfTok env owner'
 
     Nothing ->
       -- We didn't find an appropriate owner token already in the Ncc
       -- node's memory, so we just stuff the result in our temporary
       -- buffer.
-      modifyTVar' (vprop nccPartnerNewResultBuffer partner)
+      modifyTVar' (vprop nccPartnerNewResultBuff partner)
         (Set.insert newResult)
 {-# INLINABLE leftActivateNccPartner #-}
 
 -- | Searches node.tokens for a tok such that tok.parent = ownersTok
 -- and tok.wme = ownersWme.
-findNccOwner :: Node -> Maybe Token -> Maybe Wme -> STM (Maybe Token)
+findNccOwner :: Node -> Maybe Tok -> Maybe Wme -> STM (Maybe Tok)
 findNccOwner node ownersTok ownersWme = do
-  tokens <- rvprop nodeTokens node
+  tokens <- rvprop nodeToks node
   return $ headMay (filter matchingTok (Set.toList tokens))
   where
-    matchingTok tok = isJust    ownersTok &&
+    matchingTok tok = isJust ownersTok &&
                       tokParent tok == fromJust ownersTok &&
                       tokWme    tok == ownersWme
 {-# INLINE findNccOwner #-}
@@ -784,7 +789,7 @@ findNccOwner node ownersTok ownersWme = do
 -- the pair that emerged from the join node for the condition preceding
 -- the Ncc partner.
 -- [From the original Doorenbos thesis]
-findOwnersPair :: Int -> Maybe Token -> Maybe Wme -> (Maybe Token, Maybe Wme)
+findOwnersPair :: Int -> Maybe Tok -> Maybe Wme -> (Maybe Tok, Maybe Wme)
 findOwnersPair numberOfConjucts ownersTok ownersWme =
   if numberOfConjucts == 0
     then (ownersTok, ownersWme)
@@ -797,10 +802,10 @@ findOwnersPair numberOfConjucts ownersTok ownersWme =
 -- P(RODUCTION) NODES
 
 leftActivatePNode ::
-  Env -> Token -> Maybe Wme -> Node -> STM ()
+  Env -> Tok -> Maybe Wme -> Node -> STM ()
 leftActivatePNode env tok wme node  = do
   -- Create and insert a new token.
-  newTok <- makeAndInsertToken env tok wme node
+  newTok <- makeAndInsertTok env tok wme node
 
   -- Fire the proper action.
   let action = vprop pnodeAction node
@@ -952,8 +957,8 @@ propagateWmeRemoval env wme = do
 
   -- Delete all tokens wme is in. Remove every tokent from it's parent
   -- token but avoid removing from wme.
-  mapMM_ (deleteTokenAndDescendents env True False)
-    (toListT (wmeTokens wme))
+  mapMM_ (deleteTokAndDescendents env True False)
+    (toListT (wmeToks wme))
 
   -- For every jr in wme.negative-join-results
   forMM_ (toListT (wmeNegJoinResults wme)) $ \jr -> do
@@ -973,32 +978,32 @@ propagateWmeRemoval env wme = do
 -- DELETING TOKENS
 
 -- | Deletes the descendents of the passed token.
-deleteDescendentsOfToken :: Env -> Token -> STM ()
-deleteDescendentsOfToken env tok = do
+deleteDescendentsOfTok :: Env -> Tok -> STM ()
+deleteDescendentsOfTok env tok = do
   children <- readTVar (tokChildren tok)
   unless (Set.null children) $ do
     writeTVar (tokChildren tok) $! Set.empty
     -- Iteratively remove, skip removing from parent.
-    mapM_ (deleteTokenAndDescendents env False True) (Set.toList children)
-{-# INLINABLE deleteDescendentsOfToken #-}
+    mapM_ (deleteTokAndDescendents env False True) (Set.toList children)
+{-# INLINABLE deleteDescendentsOfTok #-}
 
 -- | Deletes the token and it's descendents.
-deleteTokenAndDescendents :: Env -> Bool -> Bool -> Token -> STM ()
-deleteTokenAndDescendents env removeFromParent removeFromWme tok = do
-  deleteDescendentsOfToken env tok
+deleteTokAndDescendents :: Env -> Bool -> Bool -> Tok -> STM ()
+deleteTokAndDescendents env removeFromParent removeFromWme tok = do
+  deleteDescendentsOfTok env tok
 
   let node = tokNode tok
 
   -- If tok.node is not Ncc partner ...
   unless (isNccPartner node) $
     -- ... remove tok from tok.node.items.
-    modifyTVar' (vprop nodeTokens node) (Set.delete tok)
+    modifyTVar' (vprop nodeToks node) (Set.delete tok)
 
   when removeFromWme $ do
     let wme = tokWme tok
     when (isJust wme) $ -- If tok.wme /= null ...
       -- ... remove tok from tok.wme.tokens.
-      modifyTVar' (wmeTokens (fromJust wme)) (Set.delete tok)
+      modifyTVar' (wmeToks (fromJust wme)) (Set.delete tok)
 
   when removeFromParent $
     -- Remove tok from tok.parent.children
@@ -1007,14 +1012,14 @@ deleteTokenAndDescendents env removeFromParent removeFromWme tok = do
   -- Node variant-specific cleanup:
   case nodeVariant node of
     Bmem {} ->
-      whenM (nullTSet (vprop nodeTokens node)) $
+      whenM (nullTSet (vprop nodeToks node)) $
         forMM_ (toListT (nodeChildren node)) $ \child ->
           -- Beware, some children may not have amem, e.g. predicate
           -- nodes. If needed introduce a check here.
           rightUnlink child (vprop nodeAmem child)
 
-    NegativeNode {} -> do
-      whenM (nullTSet (vprop nodeTokens node)) $
+    NegNode {} -> do
+      whenM (nullTSet (vprop nodeToks node)) $
         rightUnlink node (vprop nodeAmem node)
 
       -- For jr in tok.(neg)-join-results
@@ -1027,7 +1032,7 @@ deleteTokenAndDescendents env removeFromParent removeFromWme tok = do
       -- For result-tok in tok.ncc-results ...
       forMM_ (toListT (tokNccResults tok)) $ \resultTok -> do
           -- ... remove result-tok from result-tok.wme.tokens,
-          modifyTVar' (wmeTokens (fromJust (tokWme resultTok)))
+          modifyTVar' (wmeToks (fromJust (tokWme resultTok)))
             (Set.delete resultTok)
 
           -- ... remove result-tok from result-tok.parent.children.
@@ -1059,4 +1064,4 @@ deleteTokenAndDescendents env removeFromParent removeFromWme tok = do
 
     DTN      {} -> error "Deleting token(s) from Dummy Top Node is evil."
     JoinNode {} -> error "Can't happen."
-{-# INLINABLE deleteTokenAndDescendents #-}
+{-# INLINABLE deleteTokAndDescendents #-}

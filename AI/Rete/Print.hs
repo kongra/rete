@@ -36,6 +36,10 @@ module AI.Rete.Print
     , with, no, clear
 
       -- * Predefined compound 'Switch'es
+    , soleNetTopDown
+    , soleNetBottomUp
+
+      -- * Predefined 'Switch'es
     , withNet
     , noNet
     , withData
@@ -44,6 +48,7 @@ module AI.Rete.Print
     , down
     , withIds
     , noIds
+
       -- * 'Flag's (detailed)
     , Flag (..)
     )
@@ -242,7 +247,7 @@ up = with NodeParents . no NodeChildren . no AmemSuccessors
 -- | A 'Switch' that imposes the presentation traversal from higher
 -- nodes to lower.
 down :: Switch
-down = with NodeChildren . with AmemSuccessors . no NodeParents
+down = with NodeChildren . no AmemSuccessors . no NodeParents
 
 -- | A 'Switch' that turns IDs presentation off.
 noIds :: Switch
@@ -827,3 +832,13 @@ toShowS d switch = printTree (switches conf) . toVn
 toString :: ToVn a => Depth -> Switch -> a -> STM String
 toString d switch = liftM evalShowS . toShowS d switch
   where evalShowS s = s ""
+
+-- PREDEFINED PRINT CONFIGURATIONS
+
+-- | A 'Switch' for presenting sole Rete net bottom-up.
+soleNetBottomUp :: Switch
+soleNetBottomUp = up . with NetEmph . withNet . withIds . with AmemFields
+
+-- | A 'Switch' for presenting sole Rete net top-down.
+soleNetTopDown :: Switch
+soleNetTopDown = down . with NetEmph . withNet . withIds . with AmemFields

@@ -34,9 +34,7 @@ module AI.Rete.Print
       -- * Configuration
     , Mode (Net, Data)
     , Switch
-    , Flags
     , with, no
-    , defaultFlags
     , Flag (..)
     )
     where
@@ -47,14 +45,13 @@ import           Control.Concurrent.STM
 import           Control.Monad (liftM)
 import           Data.Foldable (Foldable)
 import qualified Data.HashMap.Strict as Map
+import qualified Data.HashSet as Set
+import           Data.Hashable (Hashable, hashWithSalt)
 import           Data.List (intersperse)
 import           Data.Maybe (catMaybes, fromJust)
 import           Data.Tree.Print
 import           Kask.Control.Monad (toListM, mapMM)
 import           Kask.Data.Function (compose, rcompose)
-
-import qualified Data.HashSet as Set
-import           Data.Hashable (Hashable, hashWithSalt)
 
 -- CONFIGURATION
 
@@ -285,12 +282,12 @@ boundless c = c { maxDepth = Nothing }
 {-# INLINE boundless #-}
 
 applySwitch :: Switch -> VConf -> VConf
-applySwitch oswitch c@Conf { opts = opts' } = c { opts = oswitch opts' }
+applySwitch switch c@Conf { opts = opts' } = c { opts = switch opts' }
 {-# INLINE applySwitch #-}
 
 -- | A mode of operating on Rete objects.
-data Mode = Net  -- ^ Puts an emphasis on the structure of the network.
-          | Data -- ^ Puts an emphasis on the data stored insite the network.
+data Mode = Net  -- ^ Emphasis on the structure of the network.
+          | Data -- ^ Emphasis on the data stored inside the network.
 
 modeSwitch :: Mode -> Switch
 modeSwitch Net  = no   DataMode

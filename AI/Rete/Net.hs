@@ -141,9 +141,9 @@ newNode env parent variant = do
 -- | Returns True iff the node is a Bmem node.
 isBmem :: Node -> Bool
 isBmem node = case nodeVariant node of
-  (Bmem {}) -> True
-  _         -> False
-{-# INLINABLE isBmem #-}
+  Bmem {} -> True
+  _       -> False
+{-# INLINE isBmem #-}
 
 -- | Creates a new β memory or returns a shared one if possible.
 buildOrShareBmem :: Env -> Node -> STM Node

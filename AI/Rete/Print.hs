@@ -26,15 +26,25 @@ module AI.Rete.Print
       toShowS
     , toString
 
-      -- * The constraints of the process
+      -- * The 'Depth' constraints of the tree traversal process
     , Depth
     , depth
     , boundless
 
-      -- * Configuration
-    , Mode (Net, Data)
+      -- * 'Switch'es
     , Switch
-    , with, no
+    , with, no, clear
+
+      -- * Predefined compound 'Switch'es
+    , withNet
+    , noNet
+    , withData
+    , noData
+    , up
+    , down
+    , withIds
+    , noIds
+      -- * 'Flag's (detailed)
     , Flag (..)
     )
     where
@@ -58,8 +68,8 @@ import           Kask.Data.Function (compose, rcompose)
 -- | A Boolean (semanticaly) configuration option for the printing
 -- process.
 data Flag =
-  -- Mode flags
-  DataMode
+  -- Emph flag
+  NetEmph | DataEmph
 
   -- Wme flags
   | WmeIds | WmeSymbolic | WmeAmems | WmeToks | WmeNegJoinResults
@@ -78,7 +88,7 @@ data Flag =
   | Uls
 
   -- Bmem flags
-  | BmemToks  | BmemAllChildren
+  | BmemToks
 
   -- JoinNode flags
   | JoinTests  | JoinAmems | JoinNearestAncestors
@@ -96,7 +106,8 @@ data Flag =
   | PNodeBindings | PNodeToks deriving (Show, Eq)
 
 flagCode :: Flag -> Int
-flagCode DataMode             = 1
+flagCode NetEmph              = 0
+flagCode DataEmph             = 1
 flagCode WmeIds               = 2
 flagCode WmeSymbolic          = 3
 flagCode WmeAmems             = 4
@@ -120,21 +131,20 @@ flagCode NodeParents          = 21
 flagCode NodeChildren         = 22
 flagCode Uls                  = 23
 flagCode BmemToks             = 24
-flagCode BmemAllChildren      = 25
-flagCode JoinTests            = 26
-flagCode JoinAmems            = 27
-flagCode JoinNearestAncestors = 28
-flagCode NegTests             = 29
-flagCode NegAmems             = 30
-flagCode NegNearestAncestors  = 31
-flagCode NegToks              = 32
-flagCode NccPartners          = 33
-flagCode NccToks              = 34
-flagCode NccNodes             = 35
-flagCode NccNumberOfConjucts  = 36
-flagCode NccNewResultBuffs    = 37
-flagCode PNodeBindings        = 38
-flagCode PNodeToks            = 39
+flagCode JoinTests            = 25
+flagCode JoinAmems            = 26
+flagCode JoinNearestAncestors = 27
+flagCode NegTests             = 28
+flagCode NegAmems             = 29
+flagCode NegNearestAncestors  = 30
+flagCode NegToks              = 31
+flagCode NccPartners          = 32
+flagCode NccToks              = 33
+flagCode NccNodes             = 34
+flagCode NccNumberOfConjucts  = 35
+flagCode NccNewResultBuffs    = 36
+flagCode PNodeBindings        = 37
+flagCode PNodeToks            = 38
 {-# INLINE flagCode #-}
 
 instance Hashable Flag where
@@ -156,14 +166,91 @@ no :: Flag -> Switch
 no = Set.delete
 {-# INLINE no #-}
 
+-- | Creates a 'Switch' that turns all flags off.
+clear :: Switch
+clear _ = noFlags
+
 -- | Asks whether the 'Flag' is on in 'Flags'.
 is :: Flag -> Flags -> Bool
 is = Set.member
 {-# INLINE is #-}
 
--- | A default set of 'Flag's with all 'Flag's turned off.
-defaultFlags :: Flags
-defaultFlags = Set.empty
+-- | A set of 'Flag's with all 'Flag's turned off.
+noFlags :: Flags
+noFlags = Set.empty
+
+-- PREDEFINED Switch CONFIGURATIONS
+
+dataFlags :: [Flag]
+dataFlags =  [ WmeToks
+             , WmeNegJoinResults
+             , TokWmes
+             , TokParents
+             , TokChildren
+             , TokJoinResults
+             , TokNccResults
+             , TokOwners
+             , AmemWmes
+             , BmemToks
+             , NegToks
+             , NccToks
+             , NccNewResultBuffs
+             , NccNumberOfConjucts
+             , PNodeToks ]
+
+netFlags :: [Flag]
+netFlags =  [ WmeAmems
+            , TokNodes
+            , AmemRefCounts
+            , AmemSuccessors
+            , NodeParents
+            , NodeChildren
+            , JoinTests
+            , JoinAmems
+            , JoinNearestAncestors
+            , NegTests
+            , NegAmems
+            , NegNearestAncestors
+            , NccPartners
+           -- NccNodes - deliberately turned off to avoid cycles
+            , PNodeBindings ]
+
+idFlags :: [Flag]
+idFlags =  [WmeIds, TokIds, NodeIds]
+
+-- | A 'Switch' that turns data presentation off.
+noData :: Switch
+noData = compose (map no dataFlags)
+
+-- | A 'Switch' that turns data presentation on.
+withData :: Switch
+withData = compose (map with dataFlags)
+
+-- | A 'Switch' that turns network presentation off.
+noNet :: Switch
+noNet = compose (map no netFlags)
+
+-- | A 'Switch' that turns network presentation on.
+withNet :: Switch
+withNet = compose (map with netFlags)
+
+-- | A 'Switch' that imposes the presentation traversal from lower
+-- nodes to higher.
+up :: Switch
+up = with NodeParents . no NodeChildren . no AmemSuccessors
+
+-- | A 'Switch' that imposes the presentation traversal from higher
+-- nodes to lower.
+down :: Switch
+down = with NodeChildren . with AmemSuccessors . no NodeParents
+
+-- | A 'Switch' that turns IDs presentation off.
+noIds :: Switch
+noIds = compose (map no idFlags)
+
+-- | A 'Switch' that turns Ids presentation on.
+withIds :: Switch
+withIds = compose (map with idFlags)
 
 -- Vns (VISUALIZATION NODEs)
 
@@ -251,11 +338,11 @@ optVns = return . catMaybes
 {-# INLINE optVns #-}
 
 netPropVn :: Flags -> OptPropVn
-netPropVn fs = if is DataMode fs then optLeafPropVn else optPropVn
+netPropVn fs = if is NetEmph fs then optPropVn else optLeafPropVn
 {-# INLINE netPropVn #-}
 
 datPropVn :: Flags -> OptPropVn
-datPropVn fs = if is DataMode fs then optPropVn else optLeafPropVn
+datPropVn fs = if is DataEmph fs then optPropVn else optLeafPropVn
 {-# INLINE datPropVn #-}
 
 -- CONFIGURATION
@@ -266,7 +353,7 @@ conf :: VConf
 conf = Conf { impl     = stmImpl
             , adjs     = \o Vn { vnAdjs = f } -> f o
             , maxDepth = Nothing
-            , opts     = defaultFlags }
+            , opts     = noFlags }
 
 -- | A specifier of depth of the treePrint process.
 type Depth = VConf -> VConf
@@ -284,15 +371,6 @@ boundless c = c { maxDepth = Nothing }
 applySwitch :: Switch -> VConf -> VConf
 applySwitch switch c@Conf { opts = opts' } = c { opts = switch opts' }
 {-# INLINE applySwitch #-}
-
--- | A mode of operating on Rete objects.
-data Mode = Net  -- ^ Emphasis on the structure of the network.
-          | Data -- ^ Emphasis on the data stored inside the network.
-
-modeSwitch :: Mode -> Switch
-modeSwitch Net  = no   DataMode
-modeSwitch Data = with DataMode
-{-# INLINE modeSwitch #-}
 
 -- STM IMPL
 
@@ -338,16 +416,16 @@ adjsWme
       , wmeToks                 = toks
       , wmeNegJoinResults       = jresults} fs = do
 
-    amemVn <- netPropVn fs (is WmeAmems fs) "amems" (readTVar amems)
-    toksVn <- datPropVn fs (is WmeToks  fs) "toks"  (readTVar toks)
-    njrsVn <- datPropVn fs (is WmeNegJoinResults fs)
-                "neg. ⊳⊲ results (owners)"
-                -- When visualizing the negative join results we only
-                -- show the owner tokens, cause wme in every negative join
-                -- result is this wme.
-                (mapMM (return . negativeJoinResultOwner) (toListT jresults))
+    amemsVn <- netPropVn fs (is WmeAmems fs) "amems" (readTVar amems)
+    toksVn  <- datPropVn fs (is WmeToks  fs) "toks"  (readTVar toks)
+    njrsVn  <- datPropVn fs (is WmeNegJoinResults fs)
+               "neg. ⊳⊲ results (owners)"
+               -- When visualizing the negative join results we only
+               -- show the owner tokens, cause wme in every negative join
+               -- result is this wme.
+               (mapMM (return . negativeJoinResultOwner) (toListT jresults))
 
-    optVns [amemVn, toksVn, njrsVn]
+    optVns [amemsVn, toksVn, njrsVn]
 {-# INLINE adjsWme #-}
 
 -- TOKENS VISUALIZATION
@@ -398,11 +476,10 @@ adjsTok
       , tokNegJoinResults = jresults
       , tokNccResults     = nresults } fs = do
 
-    parentVn <- datPropVn fs (is TokParents fs) "parent" (return [parent])
-    ownerVn  <- datPropVn fs (is TokOwners  fs) "owner"
+    nodeVn     <- netPropVn fs (is TokNodes fs)   "node"   (return [node])
+    parentVn   <- datPropVn fs (is TokParents fs) "parent" (return [parent])
+    ownerVn    <- datPropVn fs (is TokOwners  fs) "owner"
                   (liftM owner (readTVar mowner))
-    nodeVn   <- netPropVn fs (is TokNodes fs) "node" (return [node])
-
     childrenVn <- datPropVn fs (is TokChildren fs) "children"
                     (readTVar children)
     jresultsVn <- datPropVn fs (is TokJoinResults fs) "neg. ⊳⊲ results (wmes)"
@@ -413,7 +490,7 @@ adjsTok
     nresultsVn <- datPropVn fs (is TokNccResults fs) "ncc results"
                     (readTVar nresults)
 
-    optVns [parentVn, ownerVn, nodeVn, childrenVn, jresultsVn, nresultsVn]
+    optVns [nodeVn, parentVn, ownerVn, childrenVn, jresultsVn, nresultsVn]
     where
       owner ow = case ow of
         Nothing -> []
@@ -482,19 +559,29 @@ showNode node fs = do
 {-# INLINE showNode #-}
 
 adjsNode :: Node -> Flags -> STM [Vn]
-adjsNode
-  DummyTopNode { nodeChildren  = children
-               , nodeVariant   = variant } fs = do
-    childrenVn <- netPropVn fs (is NodeChildren fs) "children" (readTVar children)
-    variantVns <- adjsDTN variant fs
-    optVns (variantVns ++ [childrenVn])
+adjsNode node@DummyTopNode { nodeVariant = variant } fs = do
+  -- In the case of DTM, just like in any β memory, we traverse down
+  -- using all children, also the unlinked ones.
+  childrenVn <- netPropVn fs (is NodeChildren fs) "all children"
+                (rvprop bmemAllChildren node)
+  variantVns <- adjsDTN variant fs
+  optVns (variantVns ++ [childrenVn])
 
 adjsNode
-  Node { nodeParent    = parent
-       , nodeChildren  = children
-       , nodeVariant   = variant } fs = do
-    childrenVn <- netPropVn fs (is NodeChildren fs) "children" (readTVar children)
-    parentVn   <- netPropVn fs (is NodeParents  fs) "parent"   (return [parent])
+  node@Node { nodeParent    = parent
+            , nodeChildren  = children
+            , nodeVariant   = variant } fs = do
+
+    parentVn <- netPropVn fs (is NodeParents  fs) "parent" (return [parent])
+
+    -- In the case of β memory, we traverse down using all children,
+    -- also the unlinked ones.
+    childrenVn <- if isBmemLike variant
+                    then netPropVn fs (is NodeChildren fs) "all children"
+                         (rvprop bmemAllChildren node)
+                    else netPropVn fs (is NodeChildren fs) "children"
+                         (readTVar children)
+
     variantVns <- case variant of
       Bmem       {} -> adjsBmem       variant fs
       JoinNode   {} -> adjsJoinNode   variant fs
@@ -513,26 +600,28 @@ showBmem :: NodeVariant -> Flags -> STM ShowS
 showBmem _ _ = return (showString "β")
 {-# INLINE showBmem #-}
 
-adjsBmemLike :: TSet Tok -> TSet Node -> Flags -> STM [Maybe Vn]
-adjsBmemLike toks achildren fs = do
-    achildrenVn <- netPropVn fs (is BmemAllChildren fs) "all children"
-                     (readTVar achildren)
-    toksVn      <- datPropVn fs (is BmemToks fs) "toks" (readTVar toks)
-    return [achildrenVn, toksVn]
-{-# INLINE adjsBmemLike #-}
-
 adjsBmem :: NodeVariant -> Flags -> STM [Maybe Vn]
-adjsBmem Bmem { nodeToks = toks,  bmemAllChildren  = achildren  } fs =
-  adjsBmemLike toks achildren fs
-adjsBmem _ _ = unreachableCode
+adjsBmem Bmem { nodeToks = toks } fs = adjsBmemLike toks fs
+adjsBmem _                        _  = unreachableCode
 {-# INLINE adjsBmem #-}
+
+isBmemLike :: NodeVariant -> Bool
+isBmemLike Bmem {} = True
+isBmemLike DTN  {} = True
+isBmemLike _       = False
+{-# INLINE isBmemLike #-}
+
+adjsBmemLike :: TSet Tok -> Flags -> STM [Maybe Vn]
+adjsBmemLike toks fs = do
+    toksVn <- datPropVn fs (is BmemToks fs) "toks" (readTVar toks)
+    return [toksVn]
+{-# INLINE adjsBmemLike #-}
 
 -- DTN VISUALIZATION
 
 adjsDTN :: NodeVariant -> Flags -> STM [Maybe Vn]
-adjsDTN DTN { nodeToks = toks,  bmemAllChildren  = achildren  } fs =
-  adjsBmemLike toks achildren fs
-adjsDTN _ _ = unreachableCode
+adjsDTN DTN { nodeToks = toks } fs = adjsBmemLike toks fs
+adjsDTN _                       _  = unreachableCode
 {-# INLINE adjsDTN #-}
 
 -- JoinNode VISUALIZATION
@@ -669,8 +758,8 @@ adjsPNode
   PNode { nodeToks              = toks
         , pnodeVariableBindings = bindings } fs = do
     toksVn <- datPropVn fs (is PNodeToks     fs) "toks" (readTVar toks)
-    locsVn <- netPropVn fs (is PNodeBindings fs) "vars" (varlocs bindings)
-    return [locsVn, toksVn]
+    varsVn <- netPropVn fs (is PNodeBindings fs) "vars" (varlocs bindings)
+    return [varsVn, toksVn]
 
 adjsPNode _ _ = unreachableCode
 {-# INLINE adjsPNode #-}
@@ -730,14 +819,11 @@ unreachableCode = error "Unreachable code. Impossible has happened!!!"
 
 -- | Converts the selected object to a tree representation (expressed
 -- in ShowS).
-toShowS :: ToVn a => Mode -> Depth -> Switch -> a -> STM ShowS
-toShowS m d switch = printTree (switches conf) . toVn
-  where
-    switches = d                           -- finally depth
-             . applySwitch (modeSwitch m)  -- next the mode
-             . applySwitch switch          -- options come first
+toShowS :: ToVn a => Depth -> Switch -> a -> STM ShowS
+toShowS d switch = printTree (switches conf) . toVn
+  where switches = d . applySwitch switch
 
 -- | Works like toShowS, but returns String instead of ShowS
-toString :: ToVn a => Mode -> Depth -> Switch -> a -> STM String
-toString m d switch = liftM evalShowS . toShowS m d switch
+toString :: ToVn a => Depth -> Switch -> a -> STM String
+toString d switch = liftM evalShowS . toShowS d switch
   where evalShowS s = s ""

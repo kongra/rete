@@ -234,6 +234,10 @@ instance Eq Amem where
     Amem { amemObj = obj2, amemAttr = attr2, amemVal = val2 } =
       obj1 == obj2 && attr1 == attr2 && val1 == val2
 
+instance Hashable Amem where
+  hashWithSalt salt Amem { amemObj = obj, amemAttr = attr, amemVal = val} =
+    salt `hashWithSalt` obj `hashWithSalt` attr `hashWithSalt` val
+
 -- | Node with Variants
 data Node =
   Node

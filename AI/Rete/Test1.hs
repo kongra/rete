@@ -31,9 +31,13 @@ test1 = do
   env  <- atomically createEnv
   node <- atomically (addProduction
                       env
-                      [ c "?x" "on"      "?y"
-                      , c "?y" "left-of" "?z"
-                      , c "?z" "color"   "red" ]
+                      [
+                        c "?x" "on" "?y"
+                        -- , c   "?y" "left-of" "?z"
+                        -- , c   "?z" "color"   "red"
+                        ,
+                        neg "?z" "on" "?x"
+                      ]
                       passAction
                       Nothing)
 
@@ -42,5 +46,11 @@ test1 = do
   let dtm = envDummyTopNode env
   s2 <- atomically $ toString boundless soleNetTopDown dtm
   putStrLn s2
+
+  -- status <- atomically $ removeProduction env node
+  -- putStrLn (show status)
+
+  -- s3 <- atomically $ toString boundless soleNetTopDown dtm
+  -- putStrLn s3
 
   return ()

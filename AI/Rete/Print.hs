@@ -217,7 +217,7 @@ netFlags =  [ WmeAmems
             , NegAmems
             , NegNearestAncestors
             , NccPartners
-           -- NccNodes - deliberately turned off to avoid cycles
+            , NccNodes
             , PNodeBindings ]
 
 idFlags :: [Flag]

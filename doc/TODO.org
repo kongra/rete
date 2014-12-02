@@ -1,4 +1,4 @@
-* TODO Re-design AI.Rete.Print to use an ellipsis
+* DONE Re-design AI.Rete.Print to use an ellipsis
   to represent already visualized nodes. This will avoid going into
   cycles when presenting generalized graphs (not solely DAGs), Notation
   e.g. like below:

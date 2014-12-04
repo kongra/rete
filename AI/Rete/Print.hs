@@ -913,11 +913,13 @@ unreachableCode tag
 toShowS :: ToVn a => Depth -> Switch -> a -> STM ShowS
 toShowS d switch obj = printTree (switches conf) (toVn cleanVisited obj)
   where switches = d . applySwitch switch
+{-# INLINE toShowS #-}
 
 -- | Works like toShowS, but returns String instead of ShowS
 toString :: ToVn a => Depth -> Switch -> a -> STM String
 toString d switch = liftM evalShowS . toShowS d switch
   where evalShowS s = s ""
+{-# INLINE toString #-}
 
 -- PREDEFINED PRINT CONFIGURATIONS
 

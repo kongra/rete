@@ -641,8 +641,9 @@ adjsNode node@DummyTopNode { nodeVariant = variant } fs vs =
     let vs' = visiting node vs
     -- In the case of DTM, just like in any β memory, we traverse down
     -- using all children, also the unlinked ones.
-    childrenVn <- netPropVn fs (is NodeChildren fs) "all children" vs'
-                  (rvprop bmemAllChildren node)
+    childrenVn <- netPropVn fs (is NodeChildren fs) "children (with all)" vs'
+                  (bmemLikeChildren node)
+                  -- (rvprop bmemAllChildren node)
     variantVns <- adjsDTN variant fs vs'
     optVns (variantVns ++ [childrenVn])
 
@@ -658,8 +659,8 @@ adjsNode
       -- In the case of β memory, we traverse down using all children,
       -- also the unlinked ones.
       childrenVn <- if isBmemLike variant
-                      then netPropVn fs (is NodeChildren fs) "all children"
-                           vs' (rvprop bmemAllChildren node)
+                      then netPropVn fs (is NodeChildren fs)
+                           "children (with all)" vs' (bmemLikeChildren node)
                       else netPropVn fs (is NodeChildren fs) "children"
                            vs' (readTVar children)
 
@@ -698,6 +699,15 @@ adjsBmemLike toks fs vs' = do
     return [toksVn]
 {-# INLINE adjsBmemLike #-}
 
+-- | In the case of Bmems and STM We merge nodeChildren and
+-- bmemAllChildren.
+bmemLikeChildren :: Node -> STM (Set.HashSet Node)
+bmemLikeChildren node = do
+  children    <- liftM Set.fromList (toListT (nodeChildren node))
+  allChildren <- rvprop bmemAllChildren node
+  return (Set.union children allChildren)
+{-# INLINE bmemLikeChildren #-}
+
 -- DTN VISUALIZATION
 
 adjsDTN :: NodeVariant -> Flags -> Visited -> STM [Maybe Vn]
@@ -718,8 +728,8 @@ showJoinNode _ _ = unreachableCode "showJoinNode"
 {-# INLINE showJoinNode #-}
 
 ulSign :: Bool -> Char
-ulSign True  = '-'
-ulSign False = '+'
+ulSign True  = '-'  -- unlinked
+ulSign False = '+'  -- linked
 {-# INLINE ulSign #-}
 
 ulMark :: TVar Bool -> TVar Bool -> STM String
@@ -732,7 +742,7 @@ ulMark lu ru = do
 ulSingleMark :: TVar Bool -> STM String
 ulSingleMark unl = do
   u <- readTVar unl
-  return ['_', '/', ulSign u]
+  return ['/', ulSign u]
 {-# INLINE ulSingleMark #-}
 
 adjsJoinNode :: NodeVariant -> Flags -> Visited -> STM [Maybe Vn]
@@ -914,7 +924,9 @@ toString d switch = liftM evalShowS . toShowS d switch
 -- | A 'Switch' for presenting sole Rete net bottom-up.
 soleNetBottomUp :: Switch
 soleNetBottomUp = up . with NetEmph . withNet . withIds . with AmemFields
+                . with Uls
 
 -- | A 'Switch' for presenting sole Rete net top-down.
 soleNetTopDown :: Switch
 soleNetTopDown = down . with NetEmph . withNet . withIds . with AmemFields
+               . with Uls

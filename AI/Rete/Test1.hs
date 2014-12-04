@@ -33,7 +33,7 @@ test1 = do
                       env
                       [
                         c "?x" "on" "?y"
-                        -- , c   "?y" "left-of" "?z"
+                      , c   "?y" "left-of" "?z"
                         -- , c   "?z" "color"   "red"
                         ,
                         neg "?z" "on" "?x"

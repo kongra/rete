@@ -705,7 +705,7 @@ bmemLikeChildren :: Node -> STM (Set.HashSet Node)
 bmemLikeChildren node = do
   children    <- liftM Set.fromList (toListT (nodeChildren node))
   allChildren <- rvprop bmemAllChildren node
-  return (Set.union children allChildren)
+  return (children `Set.union` allChildren)
 {-# INLINE bmemLikeChildren #-}
 
 -- DTN VISUALIZATION

@@ -365,7 +365,7 @@ feedAmems  env wme obj attr val = do
   feedAmem env wme wildcardSymbol attr           wildcardSymbol
   feedAmem env wme wildcardSymbol wildcardSymbol val
   feedAmem env wme wildcardSymbol wildcardSymbol wildcardSymbol
-{-# INLINABLE feedAmems #-}
+{-# INLINE feedAmems #-}
 
 -- | Propagates the wme into the α memory and further down the
 -- network.
@@ -376,7 +376,7 @@ feedAmem env wme obj attr val = do
     -- Activate amem propagating to successors.
     Just amem -> activateAmem env amem wme
     Nothing   -> return ()
-{-# INLINABLE feedAmem #-}
+{-# INLINE feedAmem #-}
 
 -- WMES, ADDING
 

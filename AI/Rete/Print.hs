@@ -308,8 +308,8 @@ withEllipsisT v s = s >>= withEllipsis v
 {-# INLINE withEllipsisT #-}
 
 whenNot :: Bool -> STM [Vn] -> STM [Vn]
-whenNot True _   = return []
-whenNot False  vns = vns
+whenNot True  _   = return []
+whenNot False vns = vns
 {-# INLINE whenNot #-}
 
 -- Vns (VISUALIZATION NODEs)

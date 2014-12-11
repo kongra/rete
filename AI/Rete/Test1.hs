@@ -32,11 +32,14 @@ test1 = do
   node <- atomically (addProduction
                       env
                       [
-                        c "?x" "on" "?y"
-                      , c   "?y" "left-of" "?z"
-                        -- , c   "?z" "color"   "red"
-                        ,
-                        neg "?z" "on" "?x"
+                        c "?w" "with" "?x"
+                      , ncc [ c "?x" "on"      "?y"
+                            , c "?y" "left-of" "?z"]
+
+                      --   c "?x" "on" "?y"
+                      -- , c   "?y" "left-of" "?z"
+                      -- , c   "?z" "color"   "red"
+                      -- , neg "?z" "on" "?x"
                       ]
                       passAction
                       Nothing)

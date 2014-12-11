@@ -1,3 +1,45 @@
+* Formal verification of implementations
+
+** DONE Elimination of unused constructs
+   Acomplished with a use of GHC -Wall -W -Werror
+
+** DONE Memory management
+   Done by using GC.
+
+** DONE Ensuring all fields in a structure are properly initialized
+   This is done by using Haskell compiler. Another issue is using
+   specialized constructors to actually provide values to the
+   fields. It is a procedural issure, not the initialization itself.
+
+** TODO Sizes of collections
+   The idea here is to put constraints, e.g. non-emptiness on a
+   particular collection. Specialized constructors with newtypes may
+   help here in case of a list. Maybes are valuable as well.
+
+** TODO Exception-free codes
+   Effectively it means no places in which exceptions may be
+   raised. No use of error phrase, no unsafe operations.
+
+** TODO Policies for the ways the elements are combined together
+
+*** DONE Ensuring the order of operations.
+    In monads only. Solution: using newtypes and constructors.
+
+*** TODO Ensuring functions were called within other functions.
+
+*** TODO Ensuring a data was created/modified/operated on in a function.
+    This point is provided by the above. It boils down to using
+    functions properly.
+
+** Proposed constraining elements
+   - More or less automatic transition from math models/pseudo codes
+     into the set of constraints. The more automatic this is, the
+     better.
+   - newtypes, data types
+   - specialized constructors and encapsulation within modules
+   - endomorphisms/monoids
+   - GADTs ?
+
 * DONE Re-design AI.Rete.Print to use an ellipsis
   to represent already visualized nodes. This will avoid going into
   cycles when presenting generalized graphs (not solely DAGs), Notation

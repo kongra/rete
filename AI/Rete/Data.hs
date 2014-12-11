@@ -70,8 +70,8 @@ type TList a = TVar [a]
 type TSeq  a = TVar (Seq.Seq     a)
 type TSet  a = TVar (Set.HashSet a)
 
--- | Identifier type. From now on we treat negative identifiers as
--- special ones, and the non-negative as auto-generated.
+-- | Identifier type. We treat negative identifiers as special ones,
+-- and the non-negative as auto-generated.
 type ID = Int
 
 -- | Symbols (including Variables)
@@ -204,7 +204,7 @@ instance Hashable Tok where
 data Field = Obj | Attr | Val deriving (Show, Eq)
 
 -- | Wmes Index
-type WmesIndex = (Map.HashMap Symbol (Set.HashSet Wme))
+type WmesIndex = Map.HashMap Symbol (Set.HashSet Wme)
 
 -- | α Memory
 data Amem =
@@ -355,22 +355,15 @@ type Distance = Int
 
 -- | JoinTest
 data JoinTest =
-  JoinTest
-  {
-    joinTestField1   :: !Field
-  , joinTestField2   :: !Field
-  , joinTestDistance :: !Distance
-  }
-  deriving Eq
+  JoinTest { joinTestField1   :: !Field
+           , joinTestField2   :: !Field
+           , joinTestDistance :: !Distance } deriving Eq
 
 -- | NegJoinResult
 data NegJoinResult =
   NegJoinResult
-  {
-    negativeJoinResultOwner :: !Tok
-  , negativeJoinResultWme   :: !Wme
-  }
-  deriving (Eq)
+  { negativeJoinResultOwner :: !Tok
+  , negativeJoinResultWme   :: !Wme } deriving (Eq)
 
 instance Hashable NegJoinResult where
   hashWithSalt salt (NegJoinResult owner wme) =

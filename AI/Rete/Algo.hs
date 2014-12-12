@@ -197,7 +197,6 @@ createEnv = do
              , envDummyTopNode    = dummyNode
              , envDummyTopTok     = dummyTok
              , envProductions     = prods }
-{-# INLINABLE createEnv #-}
 
 data IDOverflow = IDOverflow deriving (Show, Typeable)
 instance Exception IDOverflow
@@ -213,7 +212,6 @@ genid Env {envId = eid} = do
   let new = recent + 1
   writeTVar eid $! new
   return new
-{-# INLINABLE genid #-}
 
 -- | Generates a new string with a unique name. The result is prefix#
 -- where # is some unique number.
@@ -283,7 +281,6 @@ internSymbol env name@[x]
 internSymbol env name@(x:_)
   | x == '?'  = internSymbolImpl env name Variable
   | otherwise = internSymbolImpl env name Symbol
-{-# INLINABLE internSymbol #-}
 
 type SymbolConstructor = ID -> String -> Symbol
 
@@ -297,7 +294,6 @@ internSymbolImpl env name constr = do
       let s = constr id' name
       modifyTVar' (envSymbolsRegistry env) (Map.insert name s)
       return s
-{-# INLINABLE internSymbolImpl #-}
 
 -- | Converts the S object into a Symbol.
 sToSymbol :: Env -> S -> STM Symbol
@@ -320,7 +316,6 @@ wmesIndexInsert :: WmesIndexOperator
 wmesIndexInsert s wme index = Map.insert s newSet index
   where oldSet = Map.lookupDefault Set.empty s index
         newSet = Set.insert wme oldSet
-{-# INLINABLE wmesIndexInsert #-}
 
 -- | Removes the passed wme (possibly) stored under the key s from the
 -- index.
@@ -330,7 +325,6 @@ wmesIndexDelete s wme index =
     Nothing     -> index
     Just oldSet -> Map.insert s newSet index
       where newSet = Set.delete wme oldSet
-{-# INLINABLE wmesIndexDelete #-}
 
 -- α MEMORY, ACTIVATION
 
@@ -350,7 +344,6 @@ activateAmem env amem wme = do
 
   -- right-activate all successors (children)
   mapMM_ (rightActivate env wme) (toListT (amemSuccessors amem))
-{-# INLINABLE activateAmem #-}
 
 -- | Propagates the wme into the corresponding α memories and further
 -- down the network
@@ -469,7 +462,6 @@ makeTok env parentTok wme node = do
     (modifyTVar' (wmeToks (fromJust wme)) (Set.insert tok))
 
   return tok
-{-# INLINABLE makeTok #-}
 
 -- | Creates a token and adds it to the node.
 makeAndInsertTok :: Env -> Tok -> Maybe Wme -> Node -> STM Tok
@@ -477,7 +469,7 @@ makeAndInsertTok env tok wme node = do
   newTok <- makeTok env tok wme node
   modifyTVar' (vprop nodeToks node) (Set.insert newTok)
   return newTok
-{-# INLINABLE makeAndInsertTok #-}
+{-# INLINE makeAndInsertTok #-}
 
 -- | Returns a sequence of wmes within the token. Every wme wrapped in
 -- a Maybe instance due to the fact that some tokens do not carry on
@@ -505,7 +497,6 @@ tokWithAncestors = map fromJust             -- safely strip-off Just
                  . takeWhile isJust       -- to avoid going into Nothings
                  . iterate safeMaybeTokParent
                  . Just
-{-# INLINABLE tokWithAncestors #-}
 
 -- | A safe (Maybe-aware) version of token wme accessor.
 safeTokWme :: Maybe Tok -> Maybe Wme
@@ -521,7 +512,6 @@ rightActivate env wme node = case nodeVariant node of
   JoinNode {} -> rightActivateJoinNode     env wme node
   NegNode  {} -> rightActivateNegNode env wme node
   _           -> error "Illegal Node used to rightActivate"
-{-# INLINABLE rightActivate #-}
 
 -- LEFT ACTIVATION DISPATCH
 
@@ -535,7 +525,6 @@ leftActivate env tok wme node = case nodeVariant node of
   NccPartner {} -> leftActivateNccPartner env tok wme node
   PNode      {} -> leftActivatePNode      env tok wme node
   DTN        {} -> error "Can't happen, nobody activates Dummy Top Node."
-{-# INLINABLE leftActivate #-}
 
 -- β MEMORIES
 
@@ -546,7 +535,6 @@ leftActivateBmem env tok wme node = do
 
   -- Left-activate children (solely JoinNodes, do not pass any wme)
   mapMM_ (leftActivate env newTok Nothing) (toListT (nodeChildren node))
-{-# INLINABLE leftActivateBmem #-}
 
 -- UNINDEXED JOIN TESTS
 
@@ -565,7 +553,6 @@ passJoinTest tok wme test = value1 == value2
     -- the tests are constructed.
     Just wme2 = tokWmes tok !! joinTestDistance test
     value2    = fieldValue (joinTestField2 test) wme2
-{-# INLINABLE passJoinTest #-}
 
 -- | Reaches a value of the wme in the specified field.
 fieldValue :: Field -> Wme -> Symbol
@@ -585,7 +572,6 @@ matchingAmemWmes tests tok amem = do
   let wmes     = tokWmes tok
       (s:sets) = map (amemWmesForTest wmes amem) tests
   toListM (foldr (liftM2 Set.intersection) s sets)
-{-# INLINABLE matchingAmemWmes #-}
 
 -- | Uses proper indexes of the α memory to return a set of wmes
 -- matching the token (represented as a sequence of Maybe Wme) wrt the
@@ -601,7 +587,6 @@ amemWmesForTest wmes amem test = do
     amemIndexForField Obj  = readTVar . amemWmesByObj
     amemIndexForField Attr = readTVar . amemWmesByAttr
     amemIndexForField Val  = readTVar . amemWmesByVal
-{-# INLINABLE amemWmesForTest #-}
 
 -- JOIN NODES
 
@@ -630,7 +615,6 @@ leftActivateJoinNode env tok _ node = do
         let wme' = Just wme
         forM_ (toList children) $ \child ->
           leftActivate env tok wme' child
-{-# INLINABLE leftActivateJoinNode #-}
 
 rightActivateJoinNode :: Env -> Wme -> Node -> STM ()
 rightActivateJoinNode env wme node = do
@@ -659,7 +643,6 @@ rightActivateJoinNode env wme node = do
           when (performJoinTests tests tok wme) $
             forM_ (toList children) $ \child ->
               leftActivate env tok wme' child
-{-# INLINABLE rightActivateJoinNode #-}
 
 -- NEGATIVE NODES
 
@@ -689,7 +672,6 @@ leftActivateNegNode env tok wme node = do
   -- If join results are empty, then inform children
   unlessM (nullTSet (tokNegJoinResults newTok)) $
     mapMM_ (leftActivate env newTok Nothing) (toListT (nodeChildren node))
-{-# INLINABLE leftActivateNegNode #-}
 
 rightActivateNegNode :: Env -> Wme -> Node -> STM ()
 rightActivateNegNode env wme node  = do
@@ -706,7 +688,6 @@ rightActivateNegNode env wme node  = do
         modifyTVar' (tokNegJoinResults tok) (Set.insert jr)
         -- insert jr into wme.neg-join-results
         modifyTVar' (wmeNegJoinResults wme) (Set.insert jr)
-{-# INLINABLE rightActivateNegNode #-}
 
 -- Ncc NODES
 
@@ -738,7 +719,6 @@ leftActivateNccNode env tok wme node = do
   when (Set.null newTokNccResults) $
     -- no ncc results so inform children
     mapMM_ (leftActivate env newTok Nothing) (toListT (nodeChildren node))
-{-# INLINABLE leftActivateNccNode #-}
 
 -- Ncc PARNTER NODES
 
@@ -768,7 +748,6 @@ leftActivateNccPartner env tok wme partner = do
       -- buffer.
       modifyTVar' (vprop nccPartnerNewResultBuff partner)
         (Set.insert newResult)
-{-# INLINABLE leftActivateNccPartner #-}
 
 -- | Searches node.tokens for a tok such that tok.parent = ownersTok
 -- and tok.wme = ownersWme.
@@ -810,7 +789,6 @@ leftActivatePNode env tok wme node  = do
   -- Fire the proper action.
   let action = vprop pnodeAction node
   action (Actx env node newTok (tokWmes newTok))
-{-# INLINABLE leftActivatePNode #-}
 
 -- LINKING/UNLINKING
 
@@ -838,7 +816,6 @@ relinkToAlphaMemory node = do
                            (Seq.|> node)
 
   writeTVar (vprop rightUnlinked node) False
-{-#  INLINABLE relinkToAlphaMemory #-}
 
 -- | The goal of this loop is to find the nearest right linked
 -- ancestor with the same α memory.
@@ -851,7 +828,6 @@ relinkAncestor node =
       if rightUnlinked'
         then relinkAncestor ancestor
         else return (Just ancestor)
-{-#  INLINABLE relinkAncestor #-}
 
 -- | Right-unlinks from the α memory.
 rightUnlink :: Node -> Amem -> STM ()
@@ -973,7 +949,6 @@ propagateWmeRemoval env wme = do
       -- For each child in jr.owner.node.children
       mapMM_ (leftActivate env owner Nothing)
         ((toListT . nodeChildren . tokNode) owner)
-{-# INLINABLE propagateWmeRemoval #-}
 
 -- DELETING TOKENS
 
@@ -985,7 +960,6 @@ deleteDescendentsOfTok env tok = do
     writeTVar (tokChildren tok) $! Set.empty
     -- Iteratively remove, skip removing from parent.
     mapM_ (deleteTokAndDescendents env False True) (Set.toList children)
-{-# INLINABLE deleteDescendentsOfTok #-}
 
 -- | Deletes the token and it's descendents.
 deleteTokAndDescendents :: Env -> Bool -> Bool -> Tok -> STM ()
@@ -1064,4 +1038,3 @@ deleteTokAndDescendents env removeFromParent removeFromWme tok = do
 
     DTN      {} -> error "Deleting token(s) from Dummy Top Node is evil."
     JoinNode {} -> error "Can't happen."
-{-# INLINABLE deleteTokAndDescendents #-}

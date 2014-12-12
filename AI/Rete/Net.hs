@@ -90,7 +90,6 @@ buildOrShareAmem env obj attr val = do
 
       -- Now we're done.
       return amem
-{-# INLINABLE buildOrShareAmem #-}
 
 -- | A simplified, more effective version of amem activation that
 -- takes place on the amem creation. No successors activation here, cause
@@ -168,7 +167,6 @@ buildOrShareBmem env parent = do
 
       -- We're done.
       return node
-{-# INLINABLE buildOrShareBmem #-}
 
 -- | Tells whether or not the Cond is a positive one.
 isPosCond :: Cond -> Bool
@@ -203,7 +201,6 @@ canonicalCond env (NegStr obj attr val) =
   cctrans env NegCond internSymbol obj attr val
 canonicalCond env (NegS obj attr val) =
   cctrans env NegCond sToSymbol obj attr val
-{-# INLINABLE canonicalCond #-}
 
 cctrans :: Env
            -> (Symbol -> Symbol -> Symbol -> Cond)
@@ -233,7 +230,6 @@ condsOrdering cond1 cond2
   -- and for the NegCond ...
   | otherwise       = if isPosCond cond2 then LT else
                       if isNccCond cond2 then GT else EQ
-{-# INLINABLE condsOrdering #-}
 
 -- JOIN TESTS
 
@@ -278,7 +274,6 @@ variableField (PosCond obj attr val) v
   | val  == v     = Just Val
   | otherwise     = Nothing
 variableField _ _ = error "Only PosConds arguments are allowed."
-{-# INLINABLE variableField #-}
 
 type IndexedCond  = (Cond, Int)
 data IndexedField = IndexedField !Field !Int
@@ -295,7 +290,6 @@ indexedField v (cond, i) =
   case variableField cond v of
     Nothing    -> Nothing
     Just field -> Just (IndexedField field i)
-{-# INLINABLE indexedField #-}
 
 joinTestFromField :: Field -> Symbol -> [IndexedCond] -> Maybe JoinTest
 joinTestFromField field v earlierConds
@@ -310,7 +304,6 @@ joinTestFromField field v earlierConds
   | otherwise = Nothing
   where
     matches = map fromJust . filter isJust . map (indexedField v)
-{-# INLINABLE joinTestFromField #-}
 
 -- JOIN NODES
 
@@ -334,14 +327,12 @@ findNearestAncestorWithSameAmem node amem =
     -- For all others...
     _ -> findNearestAncestorWithSameAmem parent amem
   where parent = nodeParent node
-{-# INLINABLE findNearestAncestorWithSameAmem #-}
 
 isShareableJoinNode :: Amem -> [JoinTest] -> Node -> Bool
 isShareableJoinNode amem tests node =
   isJoinNode node
   && amem  == vprop nodeAmem  node
   && tests == vprop joinTests node
-{-# INLINABLE isShareableJoinNode #-}
 
 buildOrShareJoinNode :: Env -> Node -> Amem -> [JoinTest] -> STM Node
 buildOrShareJoinNode env parent amem tests = do
@@ -386,7 +377,6 @@ buildOrShareJoinNode env parent amem tests = do
         modifyTVar' (nodeChildren parent) (node Seq.<|)
 
       return node
-{-# INLINABLE buildOrShareJoinNode #-}
 
 -- NEGATIVE NODES
 
@@ -395,7 +385,6 @@ isShareableNegNode amem tests node =
   isNegNode node
   && amem  == vprop nodeAmem  node
   && tests == vprop joinTests node
-{-# INLINABLE isShareableNegNode #-}
 
 buildOrShareNegNode :: Env -> Node -> Amem -> [JoinTest] -> STM Node
 buildOrShareNegNode env parent amem tests = do
@@ -433,7 +422,6 @@ buildOrShareNegNode env parent amem tests = do
         rightUnlink node amem
 
       return node
-{-# INLINABLE buildOrShareNegNode #-}
 
 -- NCC NODES CREATION
 
@@ -441,7 +429,6 @@ isShareableNccNode :: Node -> Node -> Bool
 isShareableNccNode bottomOfSubnetwork node =
   isNccNode node
   && nodeParent (vprop nccPartner node) == bottomOfSubnetwork
-{-# INLINABLE isShareableNccNode #-}
 
 buildOrShareNccNodes :: Env
                      -> Node      -- ^ parent
@@ -490,7 +477,6 @@ buildOrShareNccNodes env parent (NccCond subconds) earlierConds = do
 
 buildOrShareNccNodes _ _ _ _ =
   error "Illegal cond - only NccConds accepted."
-{-# INLINABLE buildOrShareNccNodes #-}
 
 -- BUILDING THE NETWORK
 
@@ -532,7 +518,6 @@ buildOrShareNetworkForConditions env parent (c:cs) earlierConds = do
         cs updatedEarlierConds
 
     _ -> error ("Illegal c(ond) " ++ show c)
-{-# INLINABLE buildOrShareNetworkForConditions #-}
 
 -- PROPAGATING CHANGES
 
@@ -568,7 +553,6 @@ updateNewNodeWithMatchesFromAbove env node = do
           leftActivate env tok Nothing node
 
     _ -> error "Illegal parent when updateNewNodeWithMatchesFromAbove!"
-{-# INLINABLE updateNewNodeWithMatchesFromAbove #-}
 
 -- ADDING PRODUCTIONS
 
@@ -605,7 +589,6 @@ addProduction env conds action revokeAction = do
 
   -- Done.
   return node
-{-# INLINABLE addProduction #-}
 
 -- | Works like 'addProduction' inside an action (of a production).
 addProductionA :: Actx -> [Cond] -> Action -> Maybe Action -> STM Node
@@ -651,7 +634,6 @@ valA Actx {actxNode = node, actxWmes = wmes} s =
     Nothing                      -> Nothing
     Just (SymbolLocation f dist) ->
       Just (fieldValue f (fromJust (wmes !! dist)))
-{-# INLINABLE valA #-}
 
 -- DELETING NODES
 
@@ -758,9 +740,7 @@ removeProduction env@Env { envProductions = prods } node = do
         return True)
 
     else return False
-{-# INLINABLE removeProduction #-}
 
 -- | Works like removeProduction inside an action (of a production).
 removeProductionA :: Actx -> Node -> STM Bool
 removeProductionA actx = removeProduction (actxEnv actx)
-{-# INLINE removeProductionA #-}

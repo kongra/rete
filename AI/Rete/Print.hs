@@ -383,7 +383,6 @@ optPropVn True  label vs xs = do
   if null vns
      then return Nothing
      else return (Just (propVn vs (showString label) vns))
-{-# INLINABLE optPropVn #-}
 
 optLeafPropVn :: OptPropVn
 optLeafPropVn False _     _  _  = return Nothing
@@ -392,7 +391,6 @@ optLeafPropVn True  label vs xs = do
   if null shows'
      then return Nothing
      else return (Just (leafPropVn vs (showString label) shows'))
-{-# INLINABLE optLeafPropVn #-}
 
 optVns :: Monad m => [Maybe Vn] -> m [Vn]
 optVns = return . catMaybes
@@ -757,7 +755,6 @@ adjsJoinNode
     return [amemVn, ancestorVn, testsVn]
 
 adjsJoinNode _ _ _ = unreachableCode "adjsJoinNode"
-{-# INLINABLE adjsJoinNode #-}
 
 joinAncestorM :: Monad m => Maybe a -> m [a]
 joinAncestorM ancestor = case ancestor of

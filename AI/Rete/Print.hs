@@ -350,7 +350,7 @@ propVn vs name vns = Vn { vnShowM   = \_ _ -> return name
 
 leafPropVn :: Visited -> ShowS -> [ShowVn] -> Vn
 leafPropVn vs name svns = propVn vs name (map (leafVn vs) svns)
-{- INLINE leafPropVn -}
+{-# INLINE leafPropVn #-}
 
 idS :: ID -> ShowS
 idS id' = compose [showString " ", showString $ show id']

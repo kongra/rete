@@ -734,7 +734,6 @@ deleteNodeAndAnyUnusedAncestor env node@Node {} = do
 
 -- For DummyTopNode we don't do anything
 deleteNodeAndAnyUnusedAncestor _ DummyTopNode {} = return ()
-{-# NOINLINE deleteNodeAndAnyUnusedAncestor #-}
 
 deleteAmem :: Env -> Amem -> STM ()
 deleteAmem

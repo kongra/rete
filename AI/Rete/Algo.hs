@@ -310,7 +310,7 @@ sToSymbol env (S   s) = internSymbol env s
 sToMaybeSymbol :: SymbolsRegistry -> S -> Maybe Symbol
 sToMaybeSymbol _        (Sym s) = Just s
 sToMaybeSymbol registry (S   s) = internedSymbol s registry
-{-# inline sToMaybeSymbol #-}
+{-# INLINE sToMaybeSymbol #-}
 
 -- WMES INDEXES MANIPULATION
 

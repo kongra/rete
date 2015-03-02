@@ -1,0 +1,32 @@
+-- created:          2015-03-02
+name:                rete
+version:             0.1.0.0
+synopsis:            Simple implementation of Rete algorithm in Haskell
+homepage:            https://github.com/kongra/rete
+license:             BSD3
+license-file:        LICENSE
+author:              Konrad Grzanek
+maintainer:          kongra@gmail.com
+copyright:           (c) Konrad Grzanek 2015
+category:            AI
+build-type:          Simple
+extra-source-files:  README.md
+cabal-version:       >=1.10
+
+library
+  ghc-options:       -O2 -W -Wall -funbox-strict-fields
+  if impl(ghc >= 6.8)
+    ghc-options:     -fwarn-tabs
+
+  exposed-modules:   AI.Rete.Data
+
+  other-extensions:  Safe
+  build-depends:     base >=4.7 && <4.8
+                   , containers >= 0.5.5.1
+                   , unordered-containers >= 0.2.5.0
+                   , hashable >= 1.2.2.0
+                   , safe >= 0.3.8
+                   , kask-base >= 0.1.0
+                   , treeprint >= 0.1.0
+
+  default-language:  Haskell2010

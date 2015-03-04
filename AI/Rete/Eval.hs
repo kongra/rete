@@ -14,6 +14,7 @@
 module AI.Rete.Eval where
 
 import           AI.Rete.Data
+import qualified Data.DList as A
 import           Control.Monad (when, liftM, liftM3)
 import           Control.Monad.Trans.State.Strict
 import qualified Data.HashMap.Strict as Map
@@ -132,12 +133,12 @@ instance ToConstant NamedPrimitive where
 
 internConstant :: String -> ReteM Constant
 internConstant s = do
-  rete <- get
-  let cs = reteConstants rete
+  cs <- liftM reteConstants get
   case Map.lookup s cs of
     Just c  -> return c
     Nothing -> do
-      i <- genid
+      i    <- genid
+      rete <- get
       let c = StringConstant s i
       put rete { reteConstants = Map.insert s c cs }
       return c
@@ -145,12 +146,12 @@ internConstant s = do
 
 internVariable :: String -> ReteM Variable
 internVariable s = do
-  rete <- get
-  let vs = reteVariables rete
+  vs <- liftM reteVariables get
   case Map.lookup s vs of
     Just v  -> return v
     Nothing -> do
-      i <- genid
+      i    <- genid
+      rete <- get
       let v = StringVariable s i
       put rete { reteVariables = Map.insert s v vs }
       return v
@@ -160,7 +161,7 @@ internFields :: (ToConstant o, ToConstant a, ToConstant v)
              => o -> a -> v
              -> ReteM (Obj Constant, Attr Constant, Val Constant)
 internFields o a v =
-  liftM3 (,,) (internField Obj  o) (internField Attr a) (internField Val  v)
+  liftM3 (,,) (internField Obj o) (internField Attr a) (internField Val v)
 {-# INLINE internFields #-}
 
 internField :: ToConstant a => (Constant -> b) -> a -> ReteM b
@@ -176,25 +177,25 @@ type WmesIndexOperator a =
 -- wme under the key k.
 wmesIndexInsert ::  WmesIndexOperator a
 wmesIndexInsert k wme index = Map.insert k s' index
-  where s = Map.lookupDefault Set.empty k index
+  where s  = Map.lookupDefault Set.empty k index
         s' = Set.insert wme s
 {-# INLINE wmesIndexInsert #-}
 
-addToWorkingMemoryIndexes :: Wme -> ReteM ()
-addToWorkingMemoryIndexes wme = do
+addToWorkingMemory :: Wme -> ReteM ()
+addToWorkingMemory wme@(Wme o a v) = do
   rete <- get
-  let wm     = reteWorkingMemory rete
-      byObj  = reteWmesByObj     wm
-      byAttr = reteWmesByAttr    wm
-      byVal  = reteWmesByVal     wm
-
-      Wme o a v = wme
+  let workingMemory = reteWorkingMemory rete
+      wmes          = reteWmes          workingMemory
+      byObj         = reteWmesByObj     workingMemory
+      byAttr        = reteWmesByAttr    workingMemory
+      byVal         = reteWmesByVal     workingMemory
 
   put rete { reteWorkingMemory =
-                wm { reteWmesByObj  = wmesIndexInsert o wme byObj
-                   , reteWmesByAttr = wmesIndexInsert a wme byAttr
-                   , reteWmesByVal  = wmesIndexInsert v wme byVal }}
-{-# INLINE addToWorkingMemoryIndexes #-}
+                workingMemory { reteWmes       = Set.insert        wme wmes
+                              , reteWmesByObj  = wmesIndexInsert o wme byObj
+                              , reteWmesByAttr = wmesIndexInsert a wme byAttr
+                              , reteWmesByVal  = wmesIndexInsert v wme byVal }}
+{-# INLINE addToWorkingMemory #-}
 
 -- EXPLICIT CONSTRUCTORS FOR VARIABLES
 
@@ -300,3 +301,89 @@ instance ToConstantOrVariable String where
 instance ToConstantOrVariable NamedPrimitive where
   toConstantOrVariable = return . JustConstant . NamedPrimitiveConstant
   {-# INLINE toConstantOrVariable #-}
+
+-- ALPHA MEMORY
+
+activateAmem :: Amem -> Wme -> ReteM Agenda
+activateAmem amem wme@(Wme o a v) = do
+  rete <- get
+  let astates = reteAmemStates rete
+      astate  = Map.lookupDefault
+                (error ("PANIC (2): STATE NOT FOUND FOR " ++ show amem))
+                amem astates
+      astate1 =
+        astate { amemWmes       = wme : amemWmes astate
+               , amemWmesByObj  = wmesIndexInsert o wme (amemWmesByObj  astate)
+               , amemWmesByAttr = wmesIndexInsert a wme (amemWmesByAttr astate)
+               , amemWmesByVal  = wmesIndexInsert v wme (amemWmesByVal  astate) }
+
+  put rete { reteAmemStates = Map.insert amem astate1 astates }
+
+  agendas <- mapM (rightActivateJoin wme) (amemSuccessors astate1)
+  return (A.concat agendas)
+{-# INLINE activateAmem #-}
+
+feedAmem :: Map.HashMap Wme Amem -> Wme -> Wme -> ReteM Agenda
+feedAmem amems wme k = case Map.lookup k amems of
+  -- We use amems registry passed here instead of reading them from
+  -- Rete. It is based on an assumption that activating amems does not
+  -- influence the registry in any way. It is true cause adding Wmes
+  -- is possible only through evaluating the agenda.
+  Just amem -> activateAmem amem wme
+  Nothing   -> return A.empty
+{-# INLINE feedAmem #-}
+
+feedAmems :: Wme -> Obj Constant -> Attr Constant -> Val Constant -> ReteM Agenda
+feedAmems wme o a v = do
+  let w = wildcardConstant
+  amems <- liftM reteAmems get
+
+  a1 <- feedAmem amems wme $! Wme      o        a       v
+  a2 <- feedAmem amems wme $! Wme      o        a  (Val w)
+  a3 <- feedAmem amems wme $! Wme      o  (Attr w)      v
+  a4 <- feedAmem amems wme $! Wme      o  (Attr w) (Val w)
+
+  a5 <- feedAmem amems wme $! Wme (Obj w)       a       v
+  a6 <- feedAmem amems wme $! Wme (Obj w)       a  (Val w)
+  a7 <- feedAmem amems wme $! Wme (Obj w) (Attr w)      v
+  a8 <- feedAmem amems wme $! Wme (Obj w) (Attr w) (Val w)
+
+  return $
+    a1 `A.append`
+    a2 `A.append`
+    a3 `A.append`
+    a4 `A.append`
+    a5 `A.append`
+    a6 `A.append`
+    a7 `A.append`
+    a8
+{-# INLINE feedAmems #-}
+
+-- JOIN
+
+rightActivateJoin :: Wme -> Join -> ReteM Agenda
+rightActivateJoin = undefined
+
+-- ADDING WMES
+
+-- | Adds a new fact represented by three fields.
+addWme :: (ToConstant o, ToConstant a, ToConstant v) => o -> a -> v
+       -> ReteM Agenda
+addWme o a v = do
+  (o', a', v')  <- internFields o a v
+  workingMemory <- liftM reteWorkingMemory get
+  let wme = Wme o' a' v'
+  if Set.member wme (reteWmes workingMemory)
+    then return A.empty -- Already present, do nothing.
+    else do
+      addToWorkingMemory wme
+      feedAmems wme o' a' v'
+
+-- test1 :: ReteM Id
+-- test1 = do
+--   let lst = [1 .. 103] :: [Id]
+--   _ <- mapM (\i -> internField Obj ("sym-" ++ (show i))) lst
+--   rete <- get
+--   return (reteId rete)
+
+-- 600 935 880

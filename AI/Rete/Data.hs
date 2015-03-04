@@ -11,6 +11,7 @@
 module AI.Rete.Data where
 
 import           Control.Monad.Trans.State.Strict (State)
+import qualified Data.DList as A
 import qualified Data.HashMap.Strict as Map
 import qualified Data.HashSet as Set
 import           Data.Hashable (Hashable, hashWithSalt)
@@ -244,11 +245,11 @@ data Rete =
   , reteVariables     :: !(Map.HashMap String Variable)
 
   , reteWorkingMemory :: !WorkingMemory
-  , reteAmems         :: !(Map.HashMap Wme  Amem)
+  , reteAmems         :: !(Map.HashMap Wme Amem)
 
-  , reteAmemsDict     :: !(Map.HashMap Amem AmemState)
-  , reteBmemsDict     :: !(Map.HashMap Bmem BmemState)
-  , reteJoinsDict     :: !(Map.HashMap Join JoinState) }
+  , reteAmemStates    :: !(Map.HashMap Amem AmemState)
+  , reteBmemStates    :: !(Map.HashMap Bmem BmemState)
+  , reteJoinStates    :: !(Map.HashMap Join JoinState) }
 
 -- | Rete state-monad.
 type ReteM a = State Rete a
@@ -260,18 +261,29 @@ reteInstance = Rete { reteId            = 0
                     , reteVariables     = Map.empty
                     , reteWorkingMemory = wmInstance
                     , reteAmems         = Map.empty
-                    , reteAmemsDict     = Map.empty
-                    , reteBmemsDict     = Map.empty
-                    , reteJoinsDict     = Map.empty }
+                    , reteAmemStates    = Map.empty
+                    , reteBmemStates    = Map.empty
+                    , reteJoinStates    = Map.empty }
 
 -- NETWORK
 
 -- | Alpha memory.
-newtype Amem = Amem Id
+newtype Amem = Amem Id deriving Eq
+
+instance Show Amem where
+  show (Amem i) = "Amem" ++ show i
+  {-# INLINE show #-}
+
+instance Hashable Amem where
+  hashWithSalt salt (Amem i) = salt `hashWithSalt` i
+  {-# INLINE hashWithSalt #-}
 
 data AmemState =
   AmemState
   { amemWmes       :: ![Wme]
+  , amemWmesByObj  :: !WmesByObj
+  , amemWmesByAttr :: !WmesByAttr
+  , amemWmesByVal  :: !WmesByVal
   , amemSuccessors :: ![Join] }
 
 -- | Beta memory.
@@ -326,8 +338,8 @@ type Bindings = Map.HashMap Variable Location
 data Task = AddWme | AddProd
 -- TODO: add details, priorites (see conflict set resolution)
 
--- | Agenda is a sequence of Tasks.
-type Agenda = [Task]
+-- | Agenda is a list of Tasks.
+type Agenda = A.DList Task
 
 -- CONDITIONS
 

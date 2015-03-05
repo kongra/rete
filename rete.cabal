@@ -19,7 +19,7 @@ library
     ghc-options:     -fwarn-tabs
 
   exposed-modules:   AI.Rete.Data
-                     AI.Rete.Eval
+                     AI.Rete.Flow
 
   other-extensions:  Safe
   build-depends:     base >=4.7 && <4.8

@@ -109,16 +109,16 @@ instance Show Constant where
   {-# INLINE show #-}
 
 instance Eq Constant where
-  (StringConstant       _ id1) == (StringConstant       _ id2) = id1 == id2
+  (StringConstant       _ i1 ) == (StringConstant       _ i2 ) = i1  == i2
   (PrimitiveConstant      p1 ) == (PrimitiveConstant      p2 ) = p1  == p2
   (NamedPrimitiveConstant np1) == (NamedPrimitiveConstant np2) = np1 == np2
   _ == _ = False
   {-# INLINE (==) #-}
 
 instance Hashable Constant where
-  hashWithSalt salt (StringConstant       _ id') = salt `hashWithSalt` id'
-  hashWithSalt salt (PrimitiveConstant      p  ) = salt `hashWithSalt` p
-  hashWithSalt salt (NamedPrimitiveConstant np ) = salt `hashWithSalt` np
+  hashWithSalt salt (StringConstant       _ i ) = salt `hashWithSalt` i
+  hashWithSalt salt (PrimitiveConstant      p ) = salt `hashWithSalt` p
+  hashWithSalt salt (NamedPrimitiveConstant np) = salt `hashWithSalt` np
   {-# INLINE hashWithSalt #-}
 
 -- | Variable.
@@ -131,15 +131,23 @@ instance Show Variable where
   {-# INLINE show #-}
 
 instance Eq Variable where
-  (StringVariable       _ id1) == (StringVariable       _ id2) = id1 == id2
+  (StringVariable       _ i1 ) == (StringVariable       _ i2 ) = i1  == i2
   (NamedPrimitiveVariable np1) == (NamedPrimitiveVariable np2) = np1 == np2
   _ == _ = False
   {-# INLINE (==) #-}
 
 instance Hashable Variable where
-  hashWithSalt salt (StringVariable       _ id') = salt `hashWithSalt` id'
-  hashWithSalt salt (NamedPrimitiveVariable np ) = salt `hashWithSalt` np
+  hashWithSalt salt (StringVariable       _ i ) = salt `hashWithSalt` i
+  hashWithSalt salt (NamedPrimitiveVariable np) = salt `hashWithSalt` np
   {-# INLINE hashWithSalt #-}
+
+-- SPECIAL SYMBOLS
+
+emptyConstant :: Constant
+emptyConstant =  StringConstant "" (-1)
+
+wildcardConstant :: Constant
+wildcardConstant = StringConstant "*" (-3)
 
 -- FIELDS AND THEIR VALUES
 
@@ -219,6 +227,10 @@ instance Show Tok where
       result   = compose  [showString "{", wmeShows, showString "}"]
   {-# INLINE show #-}
 
+-- | Dummy Top Token - a token with no Wmes.
+dtt :: Tok
+dtt = Tok []
+
 -- ENVIRONMENT
 
 -- | Working Memory.
@@ -256,14 +268,15 @@ type ReteM a = State Rete a
 
 -- | An initial, empty instance of the Rete network.
 reteInstance :: Rete
-reteInstance = Rete { reteId            = 0
-                    , reteConstants     = Map.empty
-                    , reteVariables     = Map.empty
-                    , reteWorkingMemory = wmInstance
-                    , reteAmems         = Map.empty
-                    , reteAmemStates    = Map.empty
-                    , reteBmemStates    = Map.empty
-                    , reteJoinStates    = Map.empty }
+reteInstance =
+  Rete { reteId            = 0
+       , reteConstants     = Map.empty
+       , reteVariables     = Map.empty
+       , reteWorkingMemory = wmInstance
+       , reteAmems         = Map.empty
+       , reteAmemStates    = Map.empty
+       , reteBmemStates    = Map.singleton dtn (BmemState [] [dtt])
+       , reteJoinStates    = Map.empty }
 
 -- NETWORK
 
@@ -304,6 +317,11 @@ data BmemState =
   , bmemToks     :: ![Tok]
   }
 
+-- | Dummy Top Node - a Bmem with only Dtt "on board" and (initially) no
+-- children.
+dtn :: Bmem
+dtn = Bmem (-1)
+
 -- | Representation of a join test.
 data JoinTest =
   JoinTest
@@ -313,9 +331,22 @@ data JoinTest =
 
 data Join =
   Join
-  { joinId    :: !Id
-  , joinTests :: ![JoinTest]
-  , joinAmem  :: !Amem }
+  { joinId     :: !Id
+  , joinTests  :: ![JoinTest]
+  , joinAmem   :: !Amem
+  , joinParent :: !Bmem }
+
+instance Show Join where
+  show join = 'J' : show (joinId join)
+  {-# INLINE show #-}
+
+instance Hashable Join where
+  hashWithSalt salt join = salt `hashWithSalt` joinId join
+  {-# INLINE hashWithSalt #-}
+
+instance Eq Join where
+  join1 == join2 = joinId join1 == joinId join2
+  {-# INLINE (==) #-}
 
 -- | Join node.
 data JoinState =

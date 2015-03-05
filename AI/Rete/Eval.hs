@@ -307,19 +307,19 @@ instance ToConstantOrVariable NamedPrimitive where
 activateAmem :: Amem -> Wme -> ReteM Agenda
 activateAmem amem wme@(Wme o a v) = do
   rete <- get
-  let astates = reteAmemStates rete
-      astate  = Map.lookupDefault
-                (error ("PANIC (2): STATE NOT FOUND FOR " ++ show amem))
-                amem astates
-      astate1 =
-        astate { amemWmes       = wme : amemWmes astate
-               , amemWmesByObj  = wmesIndexInsert o wme (amemWmesByObj  astate)
-               , amemWmesByAttr = wmesIndexInsert a wme (amemWmesByAttr astate)
-               , amemWmesByVal  = wmesIndexInsert v wme (amemWmesByVal  astate) }
+  let amemStates = reteAmemStates rete
+      st  = Map.lookupDefault
+            (error ("PANIC (2): STATE NOT FOUND FOR " ++ show amem))
+            amem amemStates
 
-  put rete { reteAmemStates = Map.insert amem astate1 astates }
+      st1 = st { amemWmes       = wme : amemWmes st
+               , amemWmesByObj  = wmesIndexInsert o wme (amemWmesByObj  st)
+               , amemWmesByAttr = wmesIndexInsert a wme (amemWmesByAttr st)
+               , amemWmesByVal  = wmesIndexInsert v wme (amemWmesByVal  st) }
 
-  agendas <- mapM (rightActivateJoin wme) (amemSuccessors astate1)
+  put rete { reteAmemStates = Map.insert amem st1 amemStates }
+
+  agendas <- mapM (rightActivateJoin wme) (amemSuccessors st1)
   return (A.concat agendas)
 {-# INLINE activateAmem #-}
 
@@ -359,10 +359,31 @@ feedAmems wme o a v = do
     a8
 {-# INLINE feedAmems #-}
 
+-- BETA MEMORY
+
+leftActivateBmem :: Bmem -> Tok -> Wme -> ReteM Agenda
+leftActivateBmem bmem (Tok wmes) wme = do
+  rete <- get
+  let newTok     = Tok (wme : wmes)
+      bmemStates = reteBmemStates rete
+      st  = Map.lookupDefault
+            (error ("PANIC (3): STATE NOT FOUND FOR " ++ show bmem))
+            bmem bmemStates
+      st1 = st { bmemToks = newTok : bmemToks st }
+
+  put rete { reteBmemStates = Map.insert bmem st1 bmemStates }
+
+  agendas <- mapM (leftActivateJoin newTok) (bmemChildren st1)
+  return (A.concat agendas)
+{-# INLINE leftActivateBmem #-}
+
 -- JOIN
 
+leftActivateJoin :: Tok -> Join -> ReteM Agenda
+leftActivateJoin _ _ = return A.empty
+
 rightActivateJoin :: Wme -> Join -> ReteM Agenda
-rightActivateJoin = undefined
+rightActivateJoin _ _ = return A.empty
 
 -- ADDING WMES
 

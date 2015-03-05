@@ -18,7 +18,7 @@ import           Data.Hashable (Hashable, hashWithSalt)
 import           Data.Int
 import           Data.List (intersperse)
 import           Data.Word
-import           Kask.Data.Function (compose)
+import           Kask.Data.Function (compose, rcompose)
 
 -- IDENTITY
 
@@ -215,8 +215,8 @@ newtype Tok = Tok [Wme]
 instance Show Tok where
   show (Tok wmes) = result ""
     where
-      wmeShows = compose (intersperse (showString ",") (map shows wmes))
-      result   = compose [showString "{", wmeShows, showString "}"]
+      wmeShows = rcompose (intersperse (showString ",") (map shows wmes))
+      result   = compose  [showString "{", wmeShows, showString "}"]
   {-# INLINE show #-}
 
 -- ENVIRONMENT
@@ -271,7 +271,7 @@ reteInstance = Rete { reteId            = 0
 newtype Amem = Amem Id deriving Eq
 
 instance Show Amem where
-  show (Amem i) = "Amem" ++ show i
+  show (Amem i) = 'B' : show i
   {-# INLINE show #-}
 
 instance Hashable Amem where
@@ -287,7 +287,15 @@ data AmemState =
   , amemSuccessors :: ![Join] }
 
 -- | Beta memory.
-newtype Bmem = Bmem Id
+newtype Bmem = Bmem Id deriving Eq
+
+instance Show Bmem where
+  show (Bmem i) = 'B' : show i
+  {-# INLINE show #-}
+
+instance Hashable Bmem where
+  hashWithSalt salt (Bmem i) = salt `hashWithSalt` i
+  {-# INLINE hashWithSalt #-}
 
 data BmemState =
   BmemState

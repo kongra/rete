@@ -15,7 +15,7 @@ module AI.Rete.Flow where
 
 import           AI.Rete.Data
 import           Control.Monad (when, liftM, liftM3, forM)
-import           Control.Monad.Trans.State.Strict
+import           Control.Monad.Trans.State.Strict (get, put)
 import qualified Data.DList as A
 import           Data.Foldable (toList)
 import qualified Data.HashMap.Strict as Map
@@ -92,17 +92,17 @@ wmesIndexInsert k wme index = Map.insert k (Set.insert wme s) index
 addToWorkingMemory :: Wme -> ReteM ()
 addToWorkingMemory wme@(Wme o a v) = do
   rete <- get
-  let workingMemory = reteWorkingMemory rete
-      wmes          = reteWmes          workingMemory
-      byObj         = reteWmesByObj     workingMemory
-      byAttr        = reteWmesByAttr    workingMemory
-      byVal         = reteWmesByVal     workingMemory
+  let wmem   = reteWorkingMemory rete
+      wmes   = reteWmes          wmem
+      byObj  = reteWmesByObj     wmem
+      byAttr = reteWmesByAttr    wmem
+      byVal  = reteWmesByVal     wmem
 
   put rete { reteWorkingMemory =
-                workingMemory { reteWmes       = Set.insert        wme wmes
-                              , reteWmesByObj  = wmesIndexInsert o wme byObj
-                              , reteWmesByAttr = wmesIndexInsert a wme byAttr
-                              , reteWmesByVal  = wmesIndexInsert v wme byVal }}
+                wmem { reteWmes       = Set.insert        wme wmes
+                     , reteWmesByObj  = wmesIndexInsert o wme byObj
+                     , reteWmesByAttr = wmesIndexInsert a wme byAttr
+                     , reteWmesByVal  = wmesIndexInsert v wme byVal }}
 {-# INLINE addToWorkingMemory #-}
 
 -- ALPHA MEMORY
@@ -111,18 +111,19 @@ activateAmem :: Amem -> Wme -> ReteM Agenda
 activateAmem amem wme@(Wme o a v) = do
   rete <- get
   let amemStates = reteAmemStates rete
-      st  = Map.lookupDefault
-            (error ("PANIC (2): STATE NOT FOUND FOR " ++ show amem))
-            amem amemStates
+      state = Map.lookupDefault
+              (error ("PANIC (2): STATE NOT FOUND FOR " ++ show amem))
+              amem amemStates
 
-      st1 = st { amemWmes       = wme : amemWmes st
-               , amemWmesByObj  = wmesIndexInsert o wme (amemWmesByObj  st)
-               , amemWmesByAttr = wmesIndexInsert a wme (amemWmesByAttr st)
-               , amemWmesByVal  = wmesIndexInsert v wme (amemWmesByVal  st) }
+      newState =
+        state { amemWmes       = wme : amemWmes state
+              , amemWmesByObj  = wmesIndexInsert o wme (amemWmesByObj  state)
+              , amemWmesByAttr = wmesIndexInsert a wme (amemWmesByAttr state)
+              , amemWmesByVal  = wmesIndexInsert v wme (amemWmesByVal  state) }
 
-  put rete { reteAmemStates = Map.insert amem st1 amemStates }
+  put rete { reteAmemStates = Map.insert amem newState amemStates }
 
-  agendas <- mapM (rightActivateJoin wme) (amemSuccessors st1)
+  agendas <- mapM (rightActivateJoin wme) (amemSuccessors newState)
   return (A.concat agendas)
 {-# INLINE activateAmem #-}
 
@@ -161,33 +162,33 @@ feedAmems wme o a v = do
 -- BETA MEMORY
 
 leftActivateBmem :: Bmem -> Tok -> Wme -> ReteM Agenda
-leftActivateBmem bmem (Tok wmes) wme = do
+leftActivateBmem bmem tok wme = do
   rete <- get
-  let newTok     = Tok (wme : wmes)
+  let newTok     = wme:tok
       bmemStates = reteBmemStates rete
-      st  = Map.lookupDefault
-            (error ("PANIC (3): STATE NOT FOUND FOR " ++ show bmem))
-            bmem bmemStates
-      st1 = st { bmemToks = newTok : bmemToks st }
+      state      = Map.lookupDefault
+                   (error ("PANIC (3): STATE NOT FOUND FOR " ++ show bmem))
+                   bmem bmemStates
+      newState  = state { bmemToks = newTok : bmemToks state }
 
-  put rete { reteBmemStates = Map.insert bmem st1 bmemStates }
+  put rete { reteBmemStates = Map.insert bmem newState bmemStates }
 
-  agendas <- mapM (leftActivateJoin newTok) (bmemChildren st1)
+  agendas <- mapM (leftActivateJoin newTok) (bmemChildren newState)
   return (A.concat agendas)
 {-# INLINE leftActivateBmem #-}
 
 -- UNINDEXED JOIN
 
 performJoinTests :: [JoinTest] -> Tok -> Wme -> Bool
-performJoinTests tests (Tok wmes) wme = all (passJoinTest wmes wme) tests
+performJoinTests tests tok wme = all (passJoinTest tok wme) tests
 {-# INLINE performJoinTests #-}
 
-passJoinTest :: [Wme] -> Wme -> JoinTest -> Bool
-passJoinTest wmes wme
+passJoinTest :: Tok -> Wme -> JoinTest -> Bool
+passJoinTest tok wme
   JoinTest { joinField1 = f1, joinField2 = f2, joinDistance = d } =
     fieldConstant f1 wme == fieldConstant f2 wme2
     where
-      wme2  = nthDef (error ("PANIC (4): ILLEGAL INDEX " ++ show d)) d wmes
+      wme2  = nthDef (error ("PANIC (4): ILLEGAL INDEX " ++ show d)) d tok
 {-# INLINE passJoinTest #-}
 
 fieldConstant :: Field -> Wme -> Constant
@@ -199,11 +200,11 @@ fieldConstant V (Wme _             _  (Val c)) = c
 -- INDEXED JOIN
 
 matchingAmemWmes :: [JoinTest] -> Tok -> AmemState -> [Wme]
-matchingAmemWmes []         _     amemState = toList (amemWmes amemState)
-matchingAmemWmes tests (Tok wmes) amemState =  -- At least one test specified.
+matchingAmemWmes []    _   amemState = toList (amemWmes amemState)
+matchingAmemWmes tests tok amemState =  -- At least one test specified.
   toList (foldr Set.intersection s sets)
   where
-    (s:sets) = map (amemWmesForTest wmes amemState) tests
+    (s:sets) = map (amemWmesForTest tok amemState) tests
 {-# INLINE matchingAmemWmes #-}
 
 amemWmesForTest :: [Wme] -> AmemState -> JoinTest -> Set.HashSet Wme
@@ -234,13 +235,13 @@ rightActivateJoin wme join = do
       parentState = Map.lookupDefault
                     (error ("PANIC (6): STATE NOT FOUND FOR " ++ show parent))
                     parent bmemStates
-      joinState   = Map.lookupDefault
+      state       = Map.lookupDefault
                     (error ("PANIC (7): STATE NOT FOUND FOR " ++ show join))
                     join joinStates
 
   agendas <- forM (bmemToks parentState) $ \tok ->
     if performJoinTests (joinTests join) tok wme
-      then leftActivateJoinChildren joinState tok wme
+      then leftActivateJoinChildren state tok wme
       else return A.empty
 
   return (A.concat agendas)
@@ -256,27 +257,27 @@ leftActivateJoin tok join = do
       amemState = Map.lookupDefault
                   (error ("PANIC (8): STATE NOT FOUND FOR " ++ show amem))
                   amem amemStates
-      joinState = Map.lookupDefault
+      state     = Map.lookupDefault
                   (error ("PANIC (9): STATE NOT FOUND FOR " ++ show join))
                   join joinStates
 
-  if noJoinChildren joinState
+  if noJoinChildren state
     then return A.empty
     else do
       let wmes = matchingAmemWmes (joinTests join) tok amemState
       agendas <- forM wmes $ \wme ->
-        leftActivateJoinChildren joinState tok wme
+        leftActivateJoinChildren state tok wme
 
       return (A.concat agendas)
 {-# INLINE leftActivateJoin #-}
 
 leftActivateJoinChildren :: JoinState -> Tok -> Wme -> ReteM Agenda
-leftActivateJoinChildren joinState tok wme = do
-  agenda <- case joinChildBmem joinState of
+leftActivateJoinChildren state tok wme = do
+  agenda <- case joinChildBmem state of
     Just bmem -> leftActivateBmem bmem tok wme
     Nothing   -> return A.empty
 
-  agendas <- mapM (leftActivateProd tok wme) (joinChildProds joinState)
+  agendas <- mapM (leftActivateProd tok wme) (joinChildProds state)
   return (A.concat (agenda : agendas))
 {-# INLINE leftActivateJoinChildren #-}
 
@@ -288,10 +289,10 @@ noJoinChildren JoinState { joinChildBmem = bmem, joinChildProds = prods } =
 -- PROD
 
 leftActivateProd :: Tok -> Wme -> Prod -> ReteM Agenda
-leftActivateProd (Tok wmes) wme Prod { prodPreds    = preds
-                                     , prodAction   = action
-                                     , prodBindings = bindings }  = do
-  let newTok = Tok (wme : wmes)
+leftActivateProd tok wme Prod { prodPreds    = preds
+                              , prodAction   = action
+                              , prodBindings = bindings }  = do
+  let newTok     = wme:tok
       matching p = p bindings newTok
 
   if all matching preds

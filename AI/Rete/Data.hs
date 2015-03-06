@@ -16,9 +16,7 @@ import qualified Data.HashMap.Strict as Map
 import qualified Data.HashSet as Set
 import           Data.Hashable (Hashable, hashWithSalt)
 import           Data.Int
-import           Data.List (intersperse)
 import           Data.Word
-import           Kask.Data.Function (compose, rcompose)
 
 -- IDENTITY
 
@@ -83,18 +81,25 @@ instance Hashable Primitive where
   {-# INLINE hashWithSalt #-}
 
 -- | Primitive that carries on its textual representation.
-data NamedPrimitive = NamedPrimitive !Primitive !String
+data NamedPrimitive =
+  NamedPrimitive
+  {
+    namedPrimitive    :: !Primitive
+  , namePrimitiveName :: !String
+  }
 
 instance Eq NamedPrimitive where
-  (NamedPrimitive p1 _) == (NamedPrimitive p2 _) = p1 == p2
+  NamedPrimitive { namedPrimitive = p1 } ==
+    NamedPrimitive { namedPrimitive = p2 } = p1 == p2
   {-# INLINE (==) #-}
 
 instance Show NamedPrimitive where
-  show (NamedPrimitive _ s) = s
+  show NamedPrimitive { namePrimitiveName = name } = name
   {-# INLINE show #-}
 
 instance Hashable NamedPrimitive where
-  hashWithSalt salt (NamedPrimitive p _) = salt `hashWithSalt` p
+  hashWithSalt salt NamedPrimitive { namedPrimitive = p } =
+    salt `hashWithSalt` p
   {-# INLINE hashWithSalt #-}
 
 -- | Constant (non-variable).
@@ -218,18 +223,11 @@ type WmesByVal   = WmesIndex     (Val         Constant)
 
 -- | Token. Represents a series of Wmes matching consecutive
 -- conditions in a production.
-newtype Tok = Tok [Wme]
-
-instance Show Tok where
-  show (Tok wmes) = result ""
-    where
-      wmeShows = rcompose (intersperse (showString ",") (map shows wmes))
-      result   = compose  [showString "{", wmeShows, showString "}"]
-  {-# INLINE show #-}
+type Tok = [Wme]
 
 -- | Dummy Top Token - a token with no Wmes.
 dtt :: Tok
-dtt = Tok []
+dtt = []
 
 -- ENVIRONMENT
 

@@ -12,7 +12,7 @@ module AI.Rete.Net where
 
 import           AI.Rete.Data
 import           AI.Rete.Flow
-import           Control.Monad (liftM)
+import           Control.Monad (liftM, forM_)
 import           Control.Monad.Trans.State.Strict (get, put)
 import qualified Data.HashMap.Strict as Map
 import qualified Data.HashSet as Set
@@ -42,7 +42,7 @@ buildOrShareAmem (Obj o) (Attr a) (Val v) = do
       rete <- get
       let amemState = createAmemState rete o' a' v'
       put
-        rete { reteAmems      = Map.insert k amem (reteAmems rete)
+        rete { reteAmems      = Map.insert k    amem      (reteAmems      rete )
              , reteAmemStates = Map.insert amem amemState (reteAmemStates rete )}
       return amem
 {-# INLINE buildOrShareAmem #-}
@@ -60,8 +60,7 @@ createAmemState rete o a v = loop wmes Map.empty Map.empty Map.empty
                                             (reteWorkingMemory rete) o a v)
 
     loop []        i1 i2 i3 = AmemState wmes i1 i2 i3 []
-    loop (w:wmes') i1 i2 i3 =
-      let (Wme wo wa wv) = w in
+    loop (w:wmes') i1 i2 i3 = let (Wme wo wa wv) = w in
       loop wmes' (wmesIndexInsert wo w i1)
                  (wmesIndexInsert wa w i2)
                  (wmesIndexInsert wv w i3)
@@ -116,3 +115,47 @@ wmesForAmemFeed True True True workingMemory _ _ _ =
   -- * * *
   reteWmes workingMemory
 {-# INLINE wmesForAmemFeed #-}
+
+-- BETA MEMORY CREATION
+
+buildOrShareBmem :: Join -> ReteM Bmem
+buildOrShareBmem join = do
+  joinStates <- liftM reteJoinStates get
+  let joinState = Map.lookupDefault
+                  (error ("PANIC (10): STATE NOT FOUND FOR " ++ show join))
+                  join joinStates
+
+  case joinChildBmem joinState of
+    Just bmem -> return bmem  -- Happily found.
+    Nothing   -> do
+      -- Let's create new Bmem.
+      bmem <- liftM Bmem genid
+      let bmemState = BmemState [] []
+
+      -- Update with matches from above:
+      -- 0. Save join prods.
+      let joinProds = joinChildProds joinState
+
+      -- 1. Set bmem as singleton child of join.
+      rete1 <- get
+      let joinState1 = JoinState { joinChildBmem  = Just bmem
+                                 , joinChildProds = [] }
+      put rete1 { reteBmemStates = Map.insert bmem bmemState
+                                   (reteBmemStates rete1)
+                , reteJoinStates = Map.insert join joinState1 joinStates }
+
+      -- 2. Right-activate-parent.
+      let amem       = joinAmem join
+          amemStates = reteAmemStates rete1
+          amemState  = Map.lookupDefault
+                       (error ("PANIC (11): STATE NOT FOUND FOR " ++ show amem))
+                       amem amemStates
+      forM_ (amemWmes amemState) $ \wme -> rightActivateJoin wme join
+
+      -- 3. Restore new children and put all in place.
+      rete2 <- get
+      let joinState2  = joinState1 { joinChildProds = joinProds }
+      put rete2 { reteJoinStates = Map.insert join joinState2
+                                   (reteJoinStates rete2) }
+      return bmem
+{-# INLINE buildOrShareBmem #-}

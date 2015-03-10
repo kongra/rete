@@ -334,6 +334,9 @@ amemWmesByAttr f s = fmap (\v -> s { _amemWmesByAttr = v} ) (f (_amemWmesByAttr 
 amemWmesByVal :: Lens AmemState WmesByVal
 amemWmesByVal f s = fmap (\v -> s { _amemWmesByVal = v} ) (f (_amemWmesByVal s))
 
+amemSuccessors :: Lens AmemState [Join]
+amemSuccessors f s = fmap (\v -> s { _amemSuccessors = v} ) (f (_amemSuccessors s))
+
 -- | Beta memory.
 newtype Bmem = Bmem Id deriving Eq
 

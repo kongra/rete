@@ -19,6 +19,7 @@ library
     ghc-options:     -fwarn-tabs
 
   exposed-modules:   AI.Rete.Data
+                     AI.Rete.State
                      AI.Rete.Flow
                      AI.Rete.Net
 

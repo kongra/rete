@@ -10,13 +10,13 @@
 ------------------------------------------------------------------------
 module AI.Rete.Data where
 
-import           Control.Monad.Trans.State.Strict (State)
 import qualified Data.DList as A
 import qualified Data.HashMap.Strict as Map
 import qualified Data.HashSet as Set
 import           Data.Hashable (Hashable, hashWithSalt)
 import           Data.Int
 import           Data.Word
+import           Kask.Control.Lens (Lens)
 
 -- IDENTITY
 
@@ -231,50 +231,75 @@ dtt = []
 
 -- ENVIRONMENT
 
--- | Working Memory.
-data WorkingMemory =
-  WorkingMemory
-  { reteWmes       :: !(Set.HashSet Wme)
-  , reteWmesByObj  :: !WmesByObj
-  , reteWmesByAttr :: !WmesByAttr
-  , reteWmesByVal  :: !WmesByVal }
-
--- | Initial, empty working memory.
-wmInstance :: WorkingMemory
-wmInstance = WorkingMemory { reteWmes       = Set.empty
-                           , reteWmesByObj  = Map.empty
-                           , reteWmesByAttr = Map.empty
-                           , reteWmesByVal  = Map.empty }
-
 -- | Rete is a representation of a network state.
 data Rete =
   Rete
-  { reteId            :: !Id
+  { _reteId            :: !Id
 
-  , reteConstants     :: !(Map.HashMap String Constant)
-  , reteVariables     :: !(Map.HashMap String Variable)
+    -- Interned symbols.
+  , _reteConstants     :: !(Map.HashMap String Constant)
+  , _reteVariables     :: !(Map.HashMap String Variable)
 
-  , reteWorkingMemory :: !WorkingMemory
-  , reteAmems         :: !(Map.HashMap Wme Amem)
+    -- WorkingMemory.
+  , _reteWmes          :: !(Set.HashSet Wme)
+  , _reteWmesByObj     :: !WmesByObj
+  , _reteWmesByAttr    :: !WmesByAttr
+  , _reteWmesByVal     :: !WmesByVal
 
-  , reteAmemStates    :: !(Map.HashMap Amem AmemState)
-  , reteBmemStates    :: !(Map.HashMap Bmem BmemState)
-  , reteJoinStates    :: !(Map.HashMap Join JoinState) }
+  , _reteAmems         :: !(Map.HashMap Wme Amem)
 
--- | Rete state-monad.
-type ReteM a = State Rete a
+    -- State registry.
+  , _reteAmemStates    :: !(Map.HashMap Amem AmemState)
+  , _reteBmemStates    :: !(Map.HashMap Bmem BmemState)
+  , _reteJoinStates    :: !(Map.HashMap Join JoinState) }
+
+reteId :: Lens Rete Id
+reteId f s = fmap (\v -> s { _reteId = v} ) (f (_reteId s))
+
+reteConstants :: Lens Rete (Map.HashMap String Constant)
+reteConstants f s = fmap (\v -> s { _reteConstants = v} ) (f (_reteConstants s))
+
+reteVariables :: Lens Rete (Map.HashMap String Variable)
+reteVariables f s = fmap (\v -> s { _reteVariables = v} ) (f (_reteVariables s))
+
+reteWmes :: Lens Rete (Set.HashSet Wme)
+reteWmes f s = fmap (\v -> s { _reteWmes = v} ) (f (_reteWmes s))
+
+reteWmesByObj :: Lens Rete WmesByObj
+reteWmesByObj f s = fmap (\v -> s { _reteWmesByObj = v} ) (f (_reteWmesByObj s))
+
+reteWmesByAttr :: Lens Rete WmesByAttr
+reteWmesByAttr f s = fmap (\v -> s { _reteWmesByAttr = v} ) (f (_reteWmesByAttr s))
+
+reteWmesByVal :: Lens Rete WmesByVal
+reteWmesByVal f s = fmap (\v -> s { _reteWmesByVal = v} ) (f (_reteWmesByVal s))
+
+reteAmems :: Lens Rete (Map.HashMap Wme Amem)
+reteAmems f s = fmap (\v -> s { _reteAmems = v} ) (f (_reteAmems s))
+
+reteAmemStates :: Lens Rete (Map.HashMap Amem AmemState)
+reteAmemStates f s = fmap (\v -> s { _reteAmemStates = v} ) (f (_reteAmemStates s))
+
+reteBmemStates :: Lens Rete (Map.HashMap Bmem BmemState)
+reteBmemStates f s = fmap (\v -> s { _reteBmemStates = v} ) (f (_reteBmemStates s))
+
+reteJoinStates :: Lens Rete (Map.HashMap Join JoinState)
+reteJoinStates f s = fmap (\v -> s { _reteJoinStates = v} ) (f (_reteJoinStates s))
 
 -- | An initial, empty instance of the Rete network.
 reteInstance :: Rete
 reteInstance =
-  Rete { reteId            = 0
-       , reteConstants     = Map.empty
-       , reteVariables     = Map.empty
-       , reteWorkingMemory = wmInstance
-       , reteAmems         = Map.empty
-       , reteAmemStates    = Map.empty
-       , reteBmemStates    = Map.singleton dtn (BmemState [] [dtt])
-       , reteJoinStates    = Map.empty }
+  Rete { _reteId         = 0
+       , _reteConstants  = Map.empty
+       , _reteVariables  = Map.empty
+       , _reteWmes       = Set.empty
+       , _reteWmesByObj  = Map.empty
+       , _reteWmesByAttr = Map.empty
+       , _reteWmesByVal  = Map.empty
+       , _reteAmems      = Map.empty
+       , _reteAmemStates = Map.empty
+       , _reteBmemStates = Map.singleton dtn (BmemState [] [dtt])
+       , _reteJoinStates = Map.empty }
 
 -- NETWORK
 
@@ -291,11 +316,23 @@ instance Hashable Amem where
 
 data AmemState =
   AmemState
-  { amemWmes       :: ![Wme]
-  , amemWmesByObj  :: !WmesByObj
-  , amemWmesByAttr :: !WmesByAttr
-  , amemWmesByVal  :: !WmesByVal
-  , amemSuccessors :: ![Join] }
+  { _amemWmes       :: ![Wme]
+  , _amemWmesByObj  :: !WmesByObj
+  , _amemWmesByAttr :: !WmesByAttr
+  , _amemWmesByVal  :: !WmesByVal
+  , _amemSuccessors :: ![Join] }
+
+amemWmes :: Lens AmemState [Wme]
+amemWmes f s = fmap (\v -> s { _amemWmes = v} ) (f (_amemWmes s))
+
+amemWmesByObj :: Lens AmemState WmesByObj
+amemWmesByObj f s = fmap (\v -> s { _amemWmesByObj = v} ) (f (_amemWmesByObj s))
+
+amemWmesByAttr :: Lens AmemState WmesByAttr
+amemWmesByAttr f s = fmap (\v -> s { _amemWmesByAttr = v} ) (f (_amemWmesByAttr s))
+
+amemWmesByVal :: Lens AmemState WmesByVal
+amemWmesByVal f s = fmap (\v -> s { _amemWmesByVal = v} ) (f (_amemWmesByVal s))
 
 -- | Beta memory.
 newtype Bmem = Bmem Id deriving Eq
@@ -311,9 +348,15 @@ instance Hashable Bmem where
 data BmemState =
   BmemState
   {
-    bmemChildren :: ![Join]
-  , bmemToks     :: ![Tok]
+    _bmemChildren :: ![Join]
+  , _bmemToks     :: ![Tok]
   }
+
+bmemChildren :: Lens BmemState [Join]
+bmemChildren f s = fmap (\v -> s { _bmemChildren = v} ) (f (_bmemChildren s))
+
+bmemToks :: Lens BmemState [Tok]
+bmemToks f s = fmap (\v -> s { _bmemToks = v} ) (f (_bmemToks s))
 
 -- | Dummy Top Node - a Bmem with only Dtt "on board" and (initially) no
 -- children.
@@ -349,8 +392,14 @@ instance Eq Join where
 -- | Join node.
 data JoinState =
   JoinState
-  { joinChildBmem  :: !(Maybe Bmem)
-  , joinChildProds :: ![Prod] }
+  { _joinChildBmem  :: !(Maybe Bmem)
+  , _joinChildProds :: ![Prod] }
+
+joinChildBmem :: Lens JoinState (Maybe Bmem)
+joinChildBmem f s = fmap (\v -> s { _joinChildBmem = v} ) (f (_joinChildBmem s))
+
+joinChildProds :: Lens JoinState [Prod]
+joinChildProds f s = fmap (\v -> s { _joinChildProds = v} ) (f (_joinChildProds s))
 
 -- | Production node.
 data Prod =

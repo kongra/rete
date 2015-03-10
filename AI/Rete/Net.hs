@@ -227,6 +227,7 @@ buildOrShareJoin bmem amem tests = do
                   (error ("PANIC (12): STATE NOT FOUND FOR " ++ show bmem))
                   bmem (reteBmemStates rete)
       isMatchingJoin j = amem == joinAmem j && tests == joinTests j
+
   case headMay (filter isMatchingJoin (bmemChildren bmemState)) of
     Just join -> return join  -- Happily found.
     Nothing   -> do

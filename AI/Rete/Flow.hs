@@ -166,7 +166,7 @@ passJoinTest tok wme
   JoinTest { joinField1 = f1, joinField2 = f2, joinDistance = d } =
     fieldConstant f1 wme == fieldConstant f2 wme2
     where
-      wme2  = nthDef (error ("PANIC (4): ILLEGAL INDEX " ++ show d)) d tok
+      wme2  = nthDef (error ("PANIC (3): ILLEGAL INDEX " ++ show d)) d tok
 {-# INLINE passJoinTest #-}
 
 fieldConstant :: Field -> Wme -> Constant
@@ -193,7 +193,7 @@ amemWmesForTest wmes amemState
       A -> amemWmesForIndex (Attr c) (view amemWmesByAttr amemState)
       V -> amemWmesForIndex (Val  c) (view amemWmesByVal  amemState)
     where
-      wme = nthDef (error ("PANIC (5): ILLEGAL INDEX " ++ show d)) d wmes
+      wme = nthDef (error ("PANIC (4): ILLEGAL INDEX " ++ show d)) d wmes
       c   = fieldConstant f2 wme
 {-# INLINE amemWmesForTest #-}
 

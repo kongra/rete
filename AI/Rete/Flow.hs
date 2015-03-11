@@ -15,21 +15,17 @@ module AI.Rete.Flow where
 
 import           AI.Rete.Data
 import           AI.Rete.State
-import           Control.Monad (when, liftM, liftM3)
+import           Control.Monad (when, liftM, liftM3, forM)
 import qualified Data.DList as A
 import           Data.Foldable (toList)
 import qualified Data.HashMap.Strict as Map
 import qualified Data.HashSet as Set
 import           Data.Hashable (Hashable)
 import           Data.Int
+import           Data.Maybe (isNothing)
 import           Data.Word
 import           Kask.Control.Lens (view, set, over)
 import           Kask.Data.List (nthDef)
-
--- import           Control.Monad (when, liftM, liftM3, forM)
---
--- import           Data.Maybe (isNothing)
---
 
 -- | Generates a new Id.
 genid :: ReteM Id
@@ -205,71 +201,46 @@ amemWmesForIndex :: (Hashable a, Eq a) => a -> WmesIndex a -> Set.HashSet Wme
 amemWmesForIndex = Map.lookupDefault Set.empty
 {-# INLINE amemWmesForIndex #-}
 
--- -- JOIN
+-- JOIN
 
 rightActivateJoin :: Wme -> Join -> ReteM Agenda
-rightActivateJoin = undefined
+rightActivateJoin wme join = do
+  state   <- viewS join
+  toks    <- liftM (view bmemToks) (viewS (joinParent join))
+  agendas <- forM toks $ \tok ->
+    if performJoinTests (joinTests join) tok wme
+      then leftActivateJoinChildren state tok wme
+      else return A.empty
 
--- rightActivateJoin wme join = do
---   rete <- get
---   let bmemStates  = reteBmemStates rete
---       joinStates  = reteJoinStates rete
-
---       parent      = joinParent join
---       parentState = Map.lookupDefault
---                     (error ("PANIC (6): STATE NOT FOUND FOR " ++ show parent))
---                     parent bmemStates
---       state       = Map.lookupDefault
---                     (error ("PANIC (7): STATE NOT FOUND FOR " ++ show join))
---                     join joinStates
-
---   agendas <- forM (bmemToks parentState) $ \tok ->
---     if performJoinTests (joinTests join) tok wme
---       then leftActivateJoinChildren state tok wme
---       else return A.empty
-
---   return (A.concat agendas)
--- {-# INLINE rightActivateJoin #-}
+  return (A.concat agendas)
+{-# INLINE rightActivateJoin #-}
 
 leftActivateJoin :: Tok -> Join -> ReteM Agenda
-leftActivateJoin = undefined
--- leftActivateJoin tok join = do
---   rete <- get
---   let amemStates = reteAmemStates rete
---       joinStates = reteJoinStates rete
-
---       amem      = joinAmem join
---       amemState = Map.lookupDefault
---                   (error ("PANIC (8): STATE NOT FOUND FOR " ++ show amem))
---                   amem amemStates
---       state     = Map.lookupDefault
---                   (error ("PANIC (9): STATE NOT FOUND FOR " ++ show join))
---                   join joinStates
-
---   if noJoinChildren state
---     then return A.empty
---     else do
---       let wmes = matchingAmemWmes (joinTests join) tok amemState
---       agendas <- forM wmes $ \wme ->
---         leftActivateJoinChildren state tok wme
-
---       return (A.concat agendas)
+leftActivateJoin tok join = do
+  state <- viewS join
+  if noJoinChildren state
+    then return A.empty
+    else do
+      amemState <- viewS (joinAmem join)
+      let wmes = matchingAmemWmes (joinTests join) tok amemState
+      agendas <- forM wmes $ \wme -> leftActivateJoinChildren state tok wme
+      return (A.concat agendas)
 -- {-# INLINE leftActivateJoin #-}
 
--- leftActivateJoinChildren :: JoinState -> Tok -> Wme -> ReteM Agenda
--- leftActivateJoinChildren state tok wme = do
---   agenda <- case joinChildBmem state of
---     Just bmem -> leftActivateBmem bmem tok wme
---     Nothing   -> return A.empty
+leftActivateJoinChildren :: JoinState -> Tok -> Wme -> ReteM Agenda
+leftActivateJoinChildren state tok wme = do
+  agenda <- case view joinChildBmem state of
+    Just bmem -> leftActivateBmem bmem tok wme
+    Nothing   -> return A.empty
 
---   agendas <- mapM (leftActivateProd tok wme) (joinChildProds state)
---   return (A.concat (agenda : agendas))
--- {-# INLINE leftActivateJoinChildren #-}
+  agendas <- mapM (leftActivateProd tok wme) (view joinChildProds state)
+  return (A.concat (agenda : agendas))
+{-# INLINE leftActivateJoinChildren #-}
 
--- noJoinChildren :: JoinState -> Bool
--- noJoinChildren JoinState { joinChildBmem = bmem, joinChildProds = prods } =
---   isNothing bmem && null prods
--- {-# INLINE noJoinChildren #-}
+noJoinChildren :: JoinState -> Bool
+noJoinChildren state =
+  isNothing (view joinChildBmem state) && null (view joinChildProds state)
+{-# INLINE noJoinChildren #-}
 
 -- PROD
 
@@ -285,20 +256,20 @@ leftActivateProd tok wme Prod { prodPreds    = preds
     else return A.empty
 {-# INLINE leftActivateProd #-}
 
--- -- ADDING WMES
+-- ADDING WMES
 
--- -- | Adds a new fact represented by three fields.
--- addWme :: (ToConstant o, ToConstant a, ToConstant v) => o -> a -> v
---        -> ReteM Agenda
--- addWme o a v = do
---   (o', a', v')  <- internFields o a v
---   workingMemory <- liftM reteWorkingMemory get
---   let wme = Wme o' a' v'
---   if Set.member wme (reteWmes workingMemory)
---     then return A.empty -- Already present, do nothing.
---     else do
---       addToWorkingMemory wme
---       feedAmems wme o' a' v'
+-- | Adds a new fact represented by three fields.
+addWme :: (ToConstant o, ToConstant a, ToConstant v) => o -> a -> v
+       -> ReteM Agenda
+addWme o a v = do
+  (o', a', v') <- internFields o a v
+  let wme = Wme o' a' v'
+  rete <- viewS ()
+  if Set.member wme (view reteWmes rete)
+    then return A.empty -- Already present, do nothing.
+    else do
+      addToWorkingMemory wme
+      feedAmems wme o' a' v'
 
 -- INTERNING PRIMITIVES
 

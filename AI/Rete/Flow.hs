@@ -30,12 +30,12 @@ import           Kask.Data.List (nthDef)
 -- | Generates a new Id.
 genid :: ReteM Id
 genid = do
-  rete <- viewS ()
-  let recent = view reteId rete
+  state <- viewS Rete
+  let recent = view reteId state
   when (recent == maxBound) (error "PANIC (2): Id OVERFLOW.")
 
   let new = recent + 1
-  setS () (set reteId new rete)
+  setS Rete (set reteId new state)
   return new
 {-# INLINE genid #-}
 
@@ -43,25 +43,25 @@ genid = do
 
 internConstant :: String -> ReteM Constant
 internConstant s = do
-  cs <- liftM (view reteConstants) (viewS ())
+  cs <- liftM (view reteConstants) (viewS Rete)
   case Map.lookup s cs of
     Just c  -> return c
     Nothing -> do
       i    <- genid
       let c = StringConstant s i
-      overS (over reteConstants (Map.insert s c)) ()
+      overS (over reteConstants (Map.insert s c)) Rete
       return c
 {-# INLINE internConstant #-}
 
 internVariable :: String -> ReteM Variable
 internVariable s = do
-  vs <- liftM (view reteVariables) (viewS ())
+  vs <- liftM (view reteVariables) (viewS Rete)
   case Map.lookup s vs of
     Just v  -> return v
     Nothing -> do
       i    <- genid
       let v = StringVariable s i
-      overS (over reteVariables (Map.insert s v)) ()
+      overS (over reteVariables (Map.insert s v)) Rete
       return v
 {-# INLINE internVariable #-}
 
@@ -94,7 +94,7 @@ addToWorkingMemory wme@(Wme o a v) =
   (  over reteWmes       (Set.insert        wme)
    . over reteWmesByObj  (wmesIndexInsert o wme)
    . over reteWmesByAttr (wmesIndexInsert a wme)
-   . over reteWmesByVal  (wmesIndexInsert v wme)) ()
+   . over reteWmesByVal  (wmesIndexInsert v wme)) Rete
 {-# INLINE addToWorkingMemory #-}
 
 -- ALPHA MEMORY
@@ -120,7 +120,7 @@ feedAmem amems wme k = case Map.lookup k amems of
 feedAmems :: Wme -> Obj Constant -> Attr Constant -> Val Constant -> ReteM Agenda
 feedAmems wme o a v = do
   let w = wildcardConstant
-  amems <- liftM (view reteAmems) (viewS ())
+  amems <- liftM (view reteAmems) (viewS Rete)
 
   a1 <- feedAmem amems wme $! Wme      o        a       v
   a2 <- feedAmem amems wme $! Wme      o        a  (Val w)
@@ -264,8 +264,8 @@ addWme :: (ToConstant o, ToConstant a, ToConstant v) => o -> a -> v
 addWme o a v = do
   (o', a', v') <- internFields o a v
   let wme = Wme o' a' v'
-  rete <- viewS ()
-  if Set.member wme (view reteWmes rete)
+  state <- viewS Rete
+  if Set.member wme (view reteWmes state)
     then return A.empty -- Already present, do nothing.
     else do
       addToWorkingMemory wme

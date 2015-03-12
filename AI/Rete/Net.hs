@@ -13,11 +13,12 @@ module AI.Rete.Net where
 import           AI.Rete.Data
 import           AI.Rete.Flow
 import           AI.Rete.State
-import           Control.Monad (liftM, forM_)
+import           Control.Monad (liftM, liftM3, forM_)
 import qualified Data.HashMap.Strict as Map
 import qualified Data.HashSet as Set
 import           Data.Maybe (isJust, fromJust)
 import           Kask.Control.Lens
+import           Kask.Data.List (nthDef)
 import           Safe (headMay)
 
 -- CREATING ALPHA MEMORY AND FEEDING IN INITIAL Wmes.
@@ -35,33 +36,33 @@ buildOrShareAmem (Obj o) (Attr a) (Val v) = do
       v'  = Val  (f v)
       k   = Wme o' a' v'
 
-  amems <- liftM (view reteAmems) (viewS ())
+  amems <- liftM (view reteAmems) (viewS Rete)
 
   case Map.lookup k amems of
-    Just amem -> return amem -- Happily found.
+    Just amem -> return amem  -- Happily found.
     Nothing   -> do
       -- Let's create new Amem.
-      amem <- liftM Amem genid
-      rete <- viewS ()
-      let amemState = createAmemState rete o' a' v'
+      amem  <- liftM Amem genid
+      state <- viewS Rete
+      let amemState = createAmemState state o' a' v'
 
       overS ( over reteAmems      (Map.insert k    amem)
-            . over reteAmemStates (Map.insert amem amemState)) ()
+            . over reteAmemStates (Map.insert amem amemState)) Rete
 
       return amem
 {-# INLINE buildOrShareAmem #-}
 
-createAmemState :: Rete
+createAmemState :: ReteState
                 -> Obj Constant -> Attr Constant -> Val Constant
                 -> AmemState
-createAmemState rete o a v = loop wmes Map.empty Map.empty Map.empty
+createAmemState state o a v = loop wmes Map.empty Map.empty Map.empty
   where
     (Obj  o') = o
     (Attr a') = a
     (Val  v') = v
     isWild  s = s == wildcardConstant
     wmes      = Set.toList (wmesForAmemFeed (isWild o') (isWild a') (isWild v')
-                                            rete o a v)
+                                            state o a v)
 
     loop []        i1 i2 i3 = AmemState wmes i1 i2 i3 []
     loop (w:wmes') i1 i2 i3 = let (Wme wo wa wv) = w in
@@ -71,53 +72,53 @@ createAmemState rete o a v = loop wmes Map.empty Map.empty Map.empty
 {-# INLINE createAmemState #-}
 
 wmesForAmemFeed :: Bool -> Bool -> Bool
-                -> Rete
+                -> ReteState
                 -> Obj Constant -> Attr Constant -> Val Constant
                 -> Set.HashSet Wme
-wmesForAmemFeed False False False rete o a v =
+wmesForAmemFeed False False False state o a v =
   -- o a v
   s1 `Set.intersection` s2 `Set.intersection` s3
   where
-    s1 = Map.lookupDefault Set.empty o (view reteWmesByObj  rete)
-    s2 = Map.lookupDefault Set.empty a (view reteWmesByAttr rete)
-    s3 = Map.lookupDefault Set.empty v (view reteWmesByVal  rete)
+    s1 = Map.lookupDefault Set.empty o (view reteWmesByObj  state)
+    s2 = Map.lookupDefault Set.empty a (view reteWmesByAttr state)
+    s3 = Map.lookupDefault Set.empty v (view reteWmesByVal  state)
 
-wmesForAmemFeed False False True rete o a _ =
+wmesForAmemFeed False False True state o a _ =
   -- o a *
   s1 `Set.intersection` s2
   where
-    s1 = Map.lookupDefault Set.empty o (view reteWmesByObj  rete)
-    s2 = Map.lookupDefault Set.empty a (view reteWmesByAttr rete)
+    s1 = Map.lookupDefault Set.empty o (view reteWmesByObj  state)
+    s2 = Map.lookupDefault Set.empty a (view reteWmesByAttr state)
 
-wmesForAmemFeed False True False rete o _ v =
+wmesForAmemFeed False True False state o _ v =
   -- o * v
   s1 `Set.intersection` s2
   where
-    s1 = Map.lookupDefault Set.empty o (view reteWmesByObj rete)
-    s2 = Map.lookupDefault Set.empty v (view reteWmesByVal rete)
+    s1 = Map.lookupDefault Set.empty o (view reteWmesByObj state)
+    s2 = Map.lookupDefault Set.empty v (view reteWmesByVal state)
 
-wmesForAmemFeed False True True rete o _ _ =
+wmesForAmemFeed False True True state o _ _ =
   -- o * *
-  Map.lookupDefault Set.empty o (view reteWmesByObj rete)
+  Map.lookupDefault Set.empty o (view reteWmesByObj state)
 
-wmesForAmemFeed True False False rete _ a v =
+wmesForAmemFeed True False False state _ a v =
   -- * a v
   s1 `Set.intersection` s2
   where
-    s1 = Map.lookupDefault Set.empty a (view reteWmesByAttr rete)
-    s2 = Map.lookupDefault Set.empty v (view reteWmesByVal  rete)
+    s1 = Map.lookupDefault Set.empty a (view reteWmesByAttr state)
+    s2 = Map.lookupDefault Set.empty v (view reteWmesByVal  state)
 
-wmesForAmemFeed True False True rete _ a _ =
+wmesForAmemFeed True False True state _ a _ =
   -- * a *
-  Map.lookupDefault Set.empty a (view reteWmesByAttr rete)
+  Map.lookupDefault Set.empty a (view reteWmesByAttr state)
 
-wmesForAmemFeed True True False rete _ _ v =
+wmesForAmemFeed True True False state _ _ v =
   -- * * v
-  Map.lookupDefault Set.empty v (view reteWmesByVal rete)
+  Map.lookupDefault Set.empty v (view reteWmesByVal state)
 
-wmesForAmemFeed True True True rete _ _ _ =
+wmesForAmemFeed True True True state _ _ _ =
   -- * * *
-  view reteWmes rete
+  view reteWmes state
 {-# INLINE wmesForAmemFeed #-}
 
 -- BETA MEMORY CREATION
@@ -131,7 +132,7 @@ buildOrShareBmem parent = do
     Nothing   -> do
       -- Let's create a new Bmem and bind it to its state.
       bmem <- liftM Bmem genid
-      overS (over reteBmemStates (Map.insert bmem (BmemState [] []))) ()
+      overS (over reteBmemStates (Map.insert bmem (BmemState [] []))) Rete
 
       -- Update with matches from above:
       -- 1. Set bmem as a single child of parent (join).
@@ -215,9 +216,96 @@ buildOrShareJoin parent amem tests = do
       -- Let's create a new Join and bind it to its state.
       i <- genid
       let join = Join i tests amem parent
-      overS (over reteJoinStates (Map.insert join (JoinState Nothing []))) ()
+      overS (over reteJoinStates (Map.insert join (JoinState Nothing []))) Rete
 
       -- Register join as its parent's child.
       setS parent (over bmemChildren (join:) parentState)
       return join
 {-# INLINE buildOrShareJoin #-}
+
+-- CREATING CONDITIONS (USER SIDE)
+
+-- | Condition (positive).
+data C = C !(ReteM (Obj  ConstantOrVariable))
+           !(ReteM (Attr ConstantOrVariable))
+           !(ReteM (Val  ConstantOrVariable))
+
+toField :: ToConstantOrVariable a => (ConstantOrVariable -> b) -> a -> ReteM b
+toField f = liftM f . toConstantOrVariable
+{-# INLINE toField #-}
+
+-- | Creates a positive condition.
+c :: (ToConstantOrVariable o, ToConstantOrVariable a, ToConstantOrVariable v)
+  => o -> a -> v -> C
+c o a v = C (toField Obj o) (toField Attr a) (toField Val v)
+{-# INLINE c #-}
+
+toCond :: C -> ReteM Cond
+toCond (C o a v) = liftM3 Cond o a v
+{-# INLINE toCond #-}
+
+-- CONFIGURING AND ACCESSING VARIABLE BINDINGS (IN ACTIONS)
+
+bindingsForConds :: Int -> [IndexedCond] -> Bindings
+bindingsForConds tokLen = loop Map.empty
+  where
+    loop result []                                           = result
+    loop result ((i, Cond (Obj o) (Attr a) (Val v)) : cs) =
+      loop result3 cs
+      where
+        result1 = bindingsForCond o O d result
+        result2 = bindingsForCond a A d result1
+        result3 = bindingsForCond v V d result2
+        d       = tokLen - i - 1
+{-# INLINE bindingsForConds #-}
+
+bindingsForCond :: ConstantOrVariable -> Field -> Int -> Bindings -> Bindings
+bindingsForCond s f d result = case s of
+  -- For constants leave the resulting bindings untouched.
+  JustConstant _ -> result
+  -- For vars avoid overriding existing bindings.
+  JustVariable v -> if   Map.member v result    then result
+                    else Map.insert v (Location d f) result
+{-# INLINE bindingsForCond #-}
+
+-- | A value of a variable inside an action.
+data VarVal = ValidVarVal   !Constant
+            | NoVarVal      !Variable
+
+instance Show VarVal where
+  show (ValidVarVal s ) = show s
+  show (NoVarVal    v ) = "ERROR (3): NO VALUE FOR VAR " ++ show v  ++ "."
+  {-# INLINE show #-}
+
+-- | Returns a value of a variable inside an Action.
+val :: Var -> Bindings -> Tok -> ReteM VarVal
+val v bindings tok = do
+  v' <- v
+  case Map.lookup v' bindings of
+    Nothing             -> return (NoVarVal v')
+    Just (Location d f) -> return (ValidVarVal (fieldConstant f wme))
+      where
+        wme = nthDef (error ("PANIC (5): ILLEGAL INDEX " ++ show d)) d tok
+
+-- | Works like val, but raises an early error when a valid value
+-- can't be returned.
+valE :: Var -> Bindings -> Tok -> ReteM Constant
+valE v bindings tok = do
+  result <- val v bindings tok
+  case result of { ValidVarVal c' -> return c'; _ -> error (show result) }
+{-# INLINE valE #-}
+
+-- | Works like valE, but returns Nothing instead of raising an error.
+valM :: Var -> Bindings -> Tok -> ReteM (Maybe Constant)
+valM v bindings tok = do
+  result <- val v bindings tok
+  case result of { ValidVarVal c' -> return (Just c'); _ -> return Nothing }
+{-# INLINE valM #-}
+
+-- EVALUATING AGENDA
+
+-- ADDING PRODUCTIONS
+
+-- | Adds a new production.
+addProd :: [C] -> Action -> ReteM Agenda
+addProd = undefined

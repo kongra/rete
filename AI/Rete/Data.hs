@@ -231,9 +231,11 @@ dtt = []
 
 -- ENVIRONMENT
 
--- | Rete is a representation of a network state.
-data Rete =
-  Rete
+-- | Represents the Rete network.
+data Rete = Rete
+
+data ReteState =
+  ReteState
   { _reteId            :: !Id
 
     -- Interned symbols.
@@ -253,53 +255,53 @@ data Rete =
   , _reteBmemStates    :: !(Map.HashMap Bmem BmemState)
   , _reteJoinStates    :: !(Map.HashMap Join JoinState) }
 
-reteId :: Lens Rete Id
+reteId :: Lens ReteState Id
 reteId f s = fmap (\v -> s { _reteId = v} ) (f (_reteId s))
 
-reteConstants :: Lens Rete (Map.HashMap String Constant)
+reteConstants :: Lens ReteState (Map.HashMap String Constant)
 reteConstants f s = fmap (\v -> s { _reteConstants = v} ) (f (_reteConstants s))
 
-reteVariables :: Lens Rete (Map.HashMap String Variable)
+reteVariables :: Lens ReteState (Map.HashMap String Variable)
 reteVariables f s = fmap (\v -> s { _reteVariables = v} ) (f (_reteVariables s))
 
-reteWmes :: Lens Rete (Set.HashSet Wme)
+reteWmes :: Lens ReteState (Set.HashSet Wme)
 reteWmes f s = fmap (\v -> s { _reteWmes = v} ) (f (_reteWmes s))
 
-reteWmesByObj :: Lens Rete WmesByObj
+reteWmesByObj :: Lens ReteState WmesByObj
 reteWmesByObj f s = fmap (\v -> s { _reteWmesByObj = v} ) (f (_reteWmesByObj s))
 
-reteWmesByAttr :: Lens Rete WmesByAttr
+reteWmesByAttr :: Lens ReteState WmesByAttr
 reteWmesByAttr f s = fmap (\v -> s { _reteWmesByAttr = v} ) (f (_reteWmesByAttr s))
 
-reteWmesByVal :: Lens Rete WmesByVal
+reteWmesByVal :: Lens ReteState WmesByVal
 reteWmesByVal f s = fmap (\v -> s { _reteWmesByVal = v} ) (f (_reteWmesByVal s))
 
-reteAmems :: Lens Rete (Map.HashMap Wme Amem)
+reteAmems :: Lens ReteState (Map.HashMap Wme Amem)
 reteAmems f s = fmap (\v -> s { _reteAmems = v} ) (f (_reteAmems s))
 
-reteAmemStates :: Lens Rete (Map.HashMap Amem AmemState)
+reteAmemStates :: Lens ReteState (Map.HashMap Amem AmemState)
 reteAmemStates f s = fmap (\v -> s { _reteAmemStates = v} ) (f (_reteAmemStates s))
 
-reteBmemStates :: Lens Rete (Map.HashMap Bmem BmemState)
+reteBmemStates :: Lens ReteState (Map.HashMap Bmem BmemState)
 reteBmemStates f s = fmap (\v -> s { _reteBmemStates = v} ) (f (_reteBmemStates s))
 
-reteJoinStates :: Lens Rete (Map.HashMap Join JoinState)
+reteJoinStates :: Lens ReteState (Map.HashMap Join JoinState)
 reteJoinStates f s = fmap (\v -> s { _reteJoinStates = v} ) (f (_reteJoinStates s))
 
--- | An initial, empty instance of the Rete network.
-reteInstance :: Rete
-reteInstance =
-  Rete { _reteId         = 0
-       , _reteConstants  = Map.empty
-       , _reteVariables  = Map.empty
-       , _reteWmes       = Set.empty
-       , _reteWmesByObj  = Map.empty
-       , _reteWmesByAttr = Map.empty
-       , _reteWmesByVal  = Map.empty
-       , _reteAmems      = Map.empty
-       , _reteAmemStates = Map.empty
-       , _reteBmemStates = Map.singleton dtn (BmemState [] [dtt])
-       , _reteJoinStates = Map.empty }
+-- | An initial, empty instance of the Rete network state.
+reteState :: ReteState
+reteState =
+  ReteState { _reteId         = 0
+            , _reteConstants  = Map.empty
+            , _reteVariables  = Map.empty
+            , _reteWmes       = Set.empty
+            , _reteWmesByObj  = Map.empty
+            , _reteWmesByAttr = Map.empty
+            , _reteWmesByVal  = Map.empty
+            , _reteAmems      = Map.empty
+            , _reteAmemStates = Map.empty
+            , _reteBmemStates = Map.singleton dtn (BmemState [] [dtt])
+            , _reteJoinStates = Map.empty }
 
 -- NETWORK
 

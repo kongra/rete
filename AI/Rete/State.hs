@@ -27,7 +27,7 @@ import           Data.Hashable (Hashable)
 import           Kask.Control.Lens
 
 -- | Rete state-monad.
-type ReteM a = S.State Rete a
+type ReteM a = S.State ReteState a
 
 class State a s where
   -- | Reads a state of the argument in Rete monad.
@@ -41,27 +41,27 @@ overS :: State a s => (s -> s) -> a -> ReteM ()
 overS f obj = viewS obj >>= setS obj . f
 {-# INLINE overS #-}
 
-instance State () Rete where
-  viewS () = S.get
-  setS  () = S.put
+instance State Rete ReteState where
+  viewS _ = S.get
+  setS  _ = S.put
   {-# INLINE viewS #-}
   {-# INLINE setS  #-}
 
 instance State Amem AmemState where
-  viewS amem   = liftM (lookupState amem . view reteAmemStates) (viewS ())
-  setS  amem s = viewS () >>= setS () . over reteAmemStates (Map.insert amem s)
+  viewS amem   = liftM (lookupState amem . view reteAmemStates) (viewS Rete)
+  setS  amem s = viewS Rete >>= setS Rete . over reteAmemStates (Map.insert amem s)
   {-# INLINE viewS #-}
   {-# INLINE setS  #-}
 
 instance State Bmem BmemState where
-  viewS bmem   = liftM (lookupState bmem . view reteBmemStates) (viewS ())
-  setS  bmem s = viewS () >>= setS () . over reteBmemStates (Map.insert bmem s)
+  viewS bmem   = liftM (lookupState bmem . view reteBmemStates) (viewS Rete)
+  setS  bmem s = viewS Rete >>= setS Rete . over reteBmemStates (Map.insert bmem s)
   {-# INLINE viewS #-}
   {-# INLINE setS  #-}
 
 instance State Join JoinState where
-  viewS bmem   = liftM (lookupState bmem . view reteJoinStates) (viewS ())
-  setS  bmem s = viewS () >>= setS () . over reteJoinStates (Map.insert bmem s)
+  viewS bmem   = liftM (lookupState bmem . view reteJoinStates) (viewS Rete)
+  setS  bmem s = viewS Rete >>= setS Rete . over reteJoinStates (Map.insert bmem s)
   {-# INLINE viewS #-}
   {-# INLINE setS  #-}
 

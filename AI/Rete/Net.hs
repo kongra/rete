@@ -307,19 +307,33 @@ valM v actx = do
 -- EVALUATING AGENDA
 
 -- | Evaluation strategy for Agendas.
-type EvalStrategy = Agenda  -- ^ Current Agenda.
+type StepStrategy = Agenda  -- ^ Current Agenda.
                  -> Agenda  -- ^ Subsequent (child) Agenda.
                  -> Agenda  -- ^ Updated Agenda.
 
--- | Breadth-first evaluation strategy.
-breadthFirst :: EvalStrategy
+-- | Breadth-first strategy.
+breadthFirst :: StepStrategy
 breadthFirst = A.append
 {-# INLINE breadthFirst #-}
 
--- | Depth-first evaluation strategy.
-depthFirst :: EvalStrategy
+-- | Depth-first strategy.
+depthFirst :: StepStrategy
 depthFirst = flip A.append
 {-# INLINE depthFirst #-}
+
+-- | Runs a forward chaining process starting with a list of tasks
+-- over current Rete state represented by ReteM (Rete
+-- state-monad). Uses strategy for agendas.
+forwardChainWithStrategy :: [Task] -> StepStrategy -> ReteM ()
+forwardChainWithStrategy []     _        = return ()
+forwardChainWithStrategy (t:ts) strategy = do
+  newAgenda <- liftM (strategy (A.fromList ts)) (taskValue t)
+  forwardChainWithStrategy (A.toList newAgenda) strategy
+
+-- | Equivalent of (`forwardChainWithStrategy` breadthFirst)
+forwardChain :: [Task] -> ReteM ()
+forwardChain = (`forwardChainWithStrategy` breadthFirst)
+{-# INLINE forwardChain #-}
 
 -- ADDING PRODUCTIONS
 
@@ -342,7 +356,9 @@ addProdA = undefined
 
 -- | Composes the passed Actions.
 acompose :: [Action] -> Action
-acompose as actx = concatMap passActx as where passActx action = action actx
+acompose as actx = concatMap passActx as
+  where
+    passActx action = action actx
 
 -- | An action that doesn't do anything.
 passAction :: Action

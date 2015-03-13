@@ -271,7 +271,7 @@ addWmeP :: (ToConstant o, ToConstant a, ToConstant v)
 addWmeP o a v priority = Task (addWmeA o a v) priority Nothing
 {-# INLINE addWmeP #-}
 
--- | Creates the Agenda in Rete monad that represents adding a new Wme.
+-- | Creates the Agenda in Rete monad that represents adding a Wme.
 addWmeA :: (ToConstant o, ToConstant a, ToConstant v) => o -> a -> v
         -> ReteM Agenda
 addWmeA o a v = do

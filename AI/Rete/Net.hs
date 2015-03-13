@@ -14,9 +14,11 @@ import           AI.Rete.Data
 import           AI.Rete.Flow
 import           AI.Rete.State
 import           Control.Monad (liftM, liftM3, forM_)
+import qualified Data.DList as A
 import qualified Data.HashMap.Strict as Map
 import qualified Data.HashSet as Set
 import           Data.Maybe (isJust, fromJust)
+import           Debug.Trace
 import           Kask.Control.Lens
 import           Kask.Data.List (nthDef)
 import           Safe (headMay)
@@ -278,10 +280,10 @@ instance Show VarVal where
   {-# INLINE show #-}
 
 -- | Returns a value of a variable inside an Action.
-val :: Var -> Bindings -> Tok -> ReteM VarVal
-val v bindings tok = do
+val :: Var -> Actx -> ReteM VarVal
+val v Actx { actxProd = prod, actxTok = tok } = do
   v' <- v
-  case Map.lookup v' bindings of
+  case Map.lookup v' (prodBindings prod) of
     Nothing             -> return (NoVarVal v')
     Just (Location d f) -> return (ValidVarVal (fieldConstant f wme))
       where
@@ -289,23 +291,66 @@ val v bindings tok = do
 
 -- | Works like val, but raises an early error when a valid value
 -- can't be returned.
-valE :: Var -> Bindings -> Tok -> ReteM Constant
-valE v bindings tok = do
-  result <- val v bindings tok
+valE :: Var -> Actx -> ReteM Constant
+valE v actx = do
+  result <- val v actx
   case result of { ValidVarVal c' -> return c'; _ -> error (show result) }
 {-# INLINE valE #-}
 
 -- | Works like valE, but returns Nothing instead of raising an error.
-valM :: Var -> Bindings -> Tok -> ReteM (Maybe Constant)
-valM v bindings tok = do
-  result <- val v bindings tok
+valM :: Var -> Actx -> ReteM (Maybe Constant)
+valM v actx = do
+  result <- val v actx
   case result of { ValidVarVal c' -> return (Just c'); _ -> return Nothing }
 {-# INLINE valM #-}
 
 -- EVALUATING AGENDA
 
+-- | Evaluation strategy for Agendas.
+type EvalStrategy = Agenda  -- ^ Current Agenda.
+                 -> Agenda  -- ^ Subsequent (child) Agenda.
+                 -> Agenda  -- ^ Updated Agenda.
+
+-- | Breadth-first evaluation strategy.
+breadthFirst :: EvalStrategy
+breadthFirst = A.append
+{-# INLINE breadthFirst #-}
+
+-- | Depth-first evaluation strategy.
+depthFirst :: EvalStrategy
+depthFirst = flip A.append
+{-# INLINE depthFirst #-}
+
 -- ADDING PRODUCTIONS
 
--- | Adds a new production.
-addProd :: [C] -> Action -> ReteM Agenda
-addProd = undefined
+-- | Creates a task with default priority (0) that represents adding a
+-- (Prod)uction.
+addProd :: [C] -> Action -> Task
+addProd conds action = addProdP conds action 0
+{-# INLINE addProd #-}
+
+-- | Creates a task with given priority that represents adding a (Prod)uction.
+addProdP :: [C] -> Action -> Int -> Task
+addProdP conds action priority = Task (addProdA conds action) priority Nothing
+{-# INLINE addProdP #-}
+
+-- | Creates the Agenda in Rete monad that represents adding a (Prod)uction.
+addProdA :: [C] -> Action -> ReteM Agenda
+addProdA = undefined
+
+-- SOME PREDEFINED ACTIONS AND RELATED UTILITIES
+
+-- | Composes the passed Actions.
+acompose :: [Action] -> Action
+acompose as actx = concatMap passActx as where passActx action = action actx
+
+-- | An action that doesn't do anything.
+passAction :: Action
+passAction _ = []
+
+-- | An action that traces a predefined text on execution.
+traceAction :: String -> Action
+traceAction s Actx { actxProd = prod } =
+  [Task { taskValue    = traceM s >> return A.empty
+        , taskPriority = 0
+        , taskProd     = Just prod }]

@@ -289,20 +289,20 @@ reteBmemStates f s = fmap (\v -> s { _reteBmemStates = v} ) (f (_reteBmemStates 
 reteJoinStates :: Lens ReteState (Map.HashMap Join JoinState)
 reteJoinStates f s = fmap (\v -> s { _reteJoinStates = v} ) (f (_reteJoinStates s))
 
--- | An initial, empty instance of the Rete network state.
-reteState :: ReteState
-reteState =
-  ReteState { _reteId         = 0
-            , _reteConstants  = Map.empty
-            , _reteVariables  = Map.empty
-            , _reteWmes       = Set.empty
-            , _reteWmesByObj  = Map.empty
-            , _reteWmesByAttr = Map.empty
-            , _reteWmesByVal  = Map.empty
-            , _reteAmems      = Map.empty
-            , _reteAmemStates = Map.empty
-            , _reteBmemStates = Map.singleton dtn (BmemState [] [dtt])
-            , _reteJoinStates = Map.empty }
+-- -- | An initial, empty instance of the Rete network state.
+-- reteState :: ReteState
+-- reteState =
+--   ReteState { _reteId         = 0
+--             , _reteConstants  = Map.empty
+--             , _reteVariables  = Map.empty
+--             , _reteWmes       = Set.empty
+--             , _reteWmesByObj  = Map.empty
+--             , _reteWmesByAttr = Map.empty
+--             , _reteWmesByVal  = Map.empty
+--             , _reteAmems      = Map.empty
+--             , _reteAmemStates = Map.empty
+--             , _reteBmemStates = Map.singleton dtn (BmemState [] [dtt])
+--             , _reteJoinStates = Map.empty }
 
 -- NETWORK
 

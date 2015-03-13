@@ -245,23 +245,36 @@ noJoinChildren state =
 -- PROD
 
 leftActivateProd :: Tok -> Wme -> Prod -> ReteM Agenda
-leftActivateProd tok wme Prod { prodPreds    = preds
-                              , prodAction   = action
-                              , prodBindings = bindings }  = do
+leftActivateProd tok wme prod@Prod { prodPreds    = preds
+                                   , prodAction   = action
+                                   , prodBindings = bindings }  = do
   let newTok     = wme:tok
       matching p = p bindings newTok
 
   if all matching preds
-    then return (action bindings newTok)
+    then return (A.fromList (map withThisProd (action (Actx prod newTok))))
     else return A.empty
+
+  where withThisProd task = task { taskProd = Just prod }
 {-# INLINE leftActivateProd #-}
 
 -- ADDING WMES
 
--- | Adds a new fact represented by three fields.
-addWme :: (ToConstant o, ToConstant a, ToConstant v) => o -> a -> v
-       -> ReteM Agenda
-addWme o a v = do
+-- | Creates a task with default priority (0) that represents adding a Wme.
+addWme :: (ToConstant o, ToConstant a, ToConstant v) => o -> a -> v -> Task
+addWme o a v = addWmeP o a v 0
+{-# INLINE addWme #-}
+
+-- | Creates a task with given priority that represents adding a Wme.
+addWmeP :: (ToConstant o, ToConstant a, ToConstant v)
+        => o -> a -> v -> Int -> Task
+addWmeP o a v priority = Task (addWmeA o a v) priority Nothing
+{-# INLINE addWmeP #-}
+
+-- | Creates the Agenda in Rete monad that represents adding a new Wme.
+addWmeA :: (ToConstant o, ToConstant a, ToConstant v) => o -> a -> v
+        -> ReteM Agenda
+addWmeA o a v = do
   (o', a', v') <- internFields o a v
   let wme = Wme o' a' v'
   state <- viewS Rete

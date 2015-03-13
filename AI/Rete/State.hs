@@ -12,8 +12,7 @@
 ------------------------------------------------------------------------
 module AI.Rete.State
     (
-      ReteM
-    , viewS
+      viewS
     , setS
     , overS
     )
@@ -25,9 +24,6 @@ import qualified Control.Monad.Trans.State.Strict as S
 import qualified Data.HashMap.Strict as Map
 import           Data.Hashable (Hashable)
 import           Kask.Control.Lens
-
--- | Rete state-monad.
-type ReteM a = S.State ReteState a
 
 class State a s where
   -- | Reads a state of the argument in Rete monad.

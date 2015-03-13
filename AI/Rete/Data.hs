@@ -10,6 +10,7 @@
 ------------------------------------------------------------------------
 module AI.Rete.Data where
 
+import qualified Control.Monad.Trans.State.Strict as S
 import qualified Data.DList as A
 import qualified Data.HashMap.Strict as Map
 import qualified Data.HashSet as Set
@@ -416,18 +417,29 @@ data Prod =
 -- | A predicate on Toks.
 type Pred = Bindings -> Tok -> Bool
 
--- | Action of a production.
-type Action = Bindings -> Tok -> Agenda
-
 -- | Symbol location describes the binding for a variable within a token.
 data Location = Location !Int !Field
 
 -- | Map of variable bindings for productions.
 type Bindings = Map.HashMap Variable Location
 
--- | Task to execute on Rete.
-data Task = AddWme | AddProd
--- TODO: add details, priorites (see conflict set resolution)
+-- EVALUATION
+
+-- | Rete state-monad.
+type ReteM a = S.State ReteState a
+
+-- | Context of a production action.
+data Actx = Actx { actxProd :: !Prod, actxTok :: !Tok }
+
+-- | Tasks are components of an Agenda.
+data Task =
+  Task
+  { taskValue    :: !(ReteM Agenda)
+  , taskPriority :: !Int
+  , taskProd     :: !(Maybe Prod) }
+
+-- | Action of a production.
+type Action = Actx -> [Task]
 
 -- | Agenda is a list of Tasks.
 type Agenda = A.DList Task

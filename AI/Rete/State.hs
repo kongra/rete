@@ -18,8 +18,6 @@ module AI.Rete.State
     , overS
 
       -- * Evaluation
-    , eval
-    , exec
     , run
     )
     where
@@ -42,16 +40,6 @@ class State a s where
 overS :: State a s => (s -> s) -> a -> ReteM ()
 overS f obj = viewS obj >>= setS obj . f
 {-# INLINE overS #-}
-
--- | Evaluates the Rete state-monad and returns the value.
-eval :: ReteState -> ReteM a -> a
-eval = flip S.evalState
-{-# INLINE eval #-}
-
--- | Executes the Rete state-monad and returns the ReteState.
-exec :: ReteState -> ReteM a -> ReteState
-exec = flip S.execState
-{-# INLINE exec #-}
 
 -- | Runs the computation in the Rete state-monad.
 run :: ReteState -> ReteM a -> (a, ReteState)

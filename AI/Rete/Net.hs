@@ -327,11 +327,19 @@ forwardStep strategy (agenda, state) = run state newAgenda
       []     -> return []
       (t:ts) -> liftM (strategy ts) (taskValue t)
 
+-- | Creates a forward chain of changes from the initial Agenda and
+-- state to the empty agenda and target state.
 forwardChain :: StepStrategy -> Agenda -> ReteState -> [(Agenda, ReteState)]
 forwardChain strategy agenda state =
   takeWhileI haveSomeWork (iterate (forwardStep strategy) (agenda, state))
   where
     haveSomeWork (a, _) = not (null a)
+
+-- | Returns the target state after forward chaining from the initial
+-- agenda and state.
+exec :: StepStrategy -> Agenda -> ReteState -> ReteState
+exec strategy agenda = snd . last . forwardChain strategy agenda
+{-# INLINE exec #-}
 
 -- ADDING PRODUCTIONS
 

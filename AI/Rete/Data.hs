@@ -11,13 +11,12 @@
 module AI.Rete.Data where
 
 import qualified Control.Monad.Trans.State.Strict as S
-import qualified Data.DList as A
 import qualified Data.HashMap.Strict as Map
 import qualified Data.HashSet as Set
 import           Data.Hashable (Hashable, hashWithSalt)
 import           Data.Int
 import           Data.Word
-import           Kask.Control.Lens (Lens)
+import           Kask.Control.Lens (Lens, view)
 
 -- IDENTITY
 
@@ -289,20 +288,25 @@ reteBmemStates f s = fmap (\v -> s { _reteBmemStates = v} ) (f (_reteBmemStates 
 reteJoinStates :: Lens ReteState (Map.HashMap Join JoinState)
 reteJoinStates f s = fmap (\v -> s { _reteJoinStates = v} ) (f (_reteJoinStates s))
 
--- -- | An initial, empty instance of the Rete network state.
--- reteState :: ReteState
--- reteState =
---   ReteState { _reteId         = 0
---             , _reteConstants  = Map.empty
---             , _reteVariables  = Map.empty
---             , _reteWmes       = Set.empty
---             , _reteWmesByObj  = Map.empty
---             , _reteWmesByAttr = Map.empty
---             , _reteWmesByVal  = Map.empty
---             , _reteAmems      = Map.empty
---             , _reteAmemStates = Map.empty
---             , _reteBmemStates = Map.singleton dtn (BmemState [] [dtt])
---             , _reteJoinStates = Map.empty }
+instance Show ReteState where
+  -- A simple visualization is just a presentation of reteId.
+  show state = 'R' : show  (view reteId state)
+  {-# INLINE show #-}
+
+-- | An initial, empty instance of the Rete network state.
+emptyRete :: ReteState
+emptyRete =
+  ReteState { _reteId         = 0
+            , _reteConstants  = Map.empty
+            , _reteVariables  = Map.empty
+            , _reteWmes       = Set.empty
+            , _reteWmesByObj  = Map.empty
+            , _reteWmesByAttr = Map.empty
+            , _reteWmesByVal  = Map.empty
+            , _reteAmems      = Map.empty
+            , _reteAmemStates = Map.empty
+            , _reteBmemStates = Map.singleton dtn (BmemState [] [dtt])
+            , _reteJoinStates = Map.empty }
 
 -- NETWORK
 
@@ -438,11 +442,15 @@ data Task =
   , taskPriority :: !Int
   , taskProd     :: !(Maybe Prod) }
 
--- | Action of a production.
-type Action = Actx -> [Task]
+instance Show Task where
+  show t = 'T' : show (taskPriority t)
+  {-# INLINE show #-}
 
 -- | Agenda is a list of Tasks.
-type Agenda = A.DList Task
+type Agenda = [Task]
+
+-- | Action of a production.
+type Action = Actx -> Agenda
 
 -- CONDITIONS
 

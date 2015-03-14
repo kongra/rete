@@ -16,7 +16,6 @@ module AI.Rete.Flow where
 import           AI.Rete.Data
 import           AI.Rete.State
 import           Control.Monad (when, liftM, liftM3, forM)
-import qualified Data.DList as A
 import           Data.Foldable (toList)
 import qualified Data.HashMap.Strict as Map
 import qualified Data.HashSet as Set
@@ -108,13 +107,13 @@ activateAmem amem wme@(Wme o a v) = do
                . over amemWmesByVal  (wmesIndexInsert v wme)) state
 
   agendas <- mapM (rightActivateJoin wme) (view amemSuccessors state)
-  return (A.concat agendas)
+  return (concat agendas)
 {-# INLINE activateAmem #-}
 
 feedAmem :: Map.HashMap Wme Amem -> Wme -> Wme -> ReteM Agenda
 feedAmem amems wme k = case Map.lookup k amems of
   Just amem -> activateAmem amem wme
-  Nothing   -> return A.empty
+  Nothing   -> return []
 {-# INLINE feedAmem #-}
 
 feedAmems :: Wme -> Obj Constant -> Attr Constant -> Val Constant -> ReteM Agenda
@@ -132,15 +131,7 @@ feedAmems wme o a v = do
   a7 <- feedAmem amems wme $! Wme (Obj w) (Attr w)      v
   a8 <- feedAmem amems wme $! Wme (Obj w) (Attr w) (Val w)
 
-  return $
-    a1 `A.append`
-    a2 `A.append`
-    a3 `A.append`
-    a4 `A.append`
-    a5 `A.append`
-    a6 `A.append`
-    a7 `A.append`
-    a8
+  return $ a1 ++ a2 ++ a3 ++ a4 ++ a5 ++ a6 ++ a7 ++ a8
 {-# INLINE feedAmems #-}
 
 -- BETA MEMORY
@@ -152,7 +143,7 @@ leftActivateBmem bmem tok wme = do
   setS bmem $ over bmemToks (newTok:) state
 
   agendas <- mapM (leftActivateJoin newTok) (view bmemChildren state)
-  return (A.concat agendas)
+  return (concat agendas)
 {-# INLINE leftActivateBmem #-}
 
 -- UNINDEXED JOIN
@@ -210,31 +201,31 @@ rightActivateJoin wme join = do
   agendas <- forM toks $ \tok ->
     if performJoinTests (joinTests join) tok wme
       then leftActivateJoinChildren state tok wme
-      else return A.empty
+      else return []
 
-  return (A.concat agendas)
+  return (concat agendas)
 {-# INLINE rightActivateJoin #-}
 
 leftActivateJoin :: Tok -> Join -> ReteM Agenda
 leftActivateJoin tok join = do
   state <- viewS join
   if noJoinChildren state
-    then return A.empty
+    then return []
     else do
       amemState <- viewS (joinAmem join)
       let wmes = matchingAmemWmes (joinTests join) tok amemState
       agendas <- forM wmes $ \wme -> leftActivateJoinChildren state tok wme
-      return (A.concat agendas)
+      return (concat agendas)
 -- {-# INLINE leftActivateJoin #-}
 
 leftActivateJoinChildren :: JoinState -> Tok -> Wme -> ReteM Agenda
 leftActivateJoinChildren state tok wme = do
   agenda <- case view joinChildBmem state of
     Just bmem -> leftActivateBmem bmem tok wme
-    Nothing   -> return A.empty
+    Nothing   -> return []
 
   agendas <- mapM (leftActivateProd tok wme) (view joinChildProds state)
-  return (A.concat (agenda : agendas))
+  return (concat (agenda : agendas))
 {-# INLINE leftActivateJoinChildren #-}
 
 noJoinChildren :: JoinState -> Bool
@@ -252,8 +243,8 @@ leftActivateProd tok wme prod@Prod { prodPreds    = preds
       matching p = p bindings newTok
 
   if all matching preds
-    then return (A.fromList (map withThisProd (action (Actx prod newTok))))
-    else return A.empty
+    then return (map withThisProd (action (Actx prod newTok)))
+    else return []
 
   where withThisProd task = task { taskProd = Just prod }
 {-# INLINE leftActivateProd #-}
@@ -279,7 +270,7 @@ addWmeA o a v = do
   let wme = Wme o' a' v'
   state <- viewS Rete
   if Set.member wme (view reteWmes state)
-    then return A.empty -- Already present, do nothing.
+    then return [] -- Already present, do nothing.
     else do
       addToWorkingMemory wme
       feedAmems wme o' a' v'

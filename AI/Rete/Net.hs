@@ -14,13 +14,12 @@ import           AI.Rete.Data
 import           AI.Rete.Flow
 import           AI.Rete.State
 import           Control.Monad (liftM, liftM3, forM_)
-import qualified Data.DList as A
 import qualified Data.HashMap.Strict as Map
 import qualified Data.HashSet as Set
 import           Data.Maybe (isJust, fromJust)
 import           Debug.Trace
 import           Kask.Control.Lens
-import           Kask.Data.List (nthDef)
+import           Kask.Data.List (nthDef, takeWhileI)
 import           Safe (headMay)
 
 -- CREATING ALPHA MEMORY AND FEEDING IN INITIAL Wmes.
@@ -304,7 +303,7 @@ valM v actx = do
   case result of { ValidVarVal c' -> return (Just c'); _ -> return Nothing }
 {-# INLINE valM #-}
 
--- EVALUATING AGENDA
+-- FORWARD CHAINING
 
 -- | Evaluation strategy for Agendas.
 type StepStrategy = Agenda  -- ^ Current Agenda.
@@ -313,27 +312,26 @@ type StepStrategy = Agenda  -- ^ Current Agenda.
 
 -- | Breadth-first strategy.
 breadthFirst :: StepStrategy
-breadthFirst = A.append
+breadthFirst = (++)
 {-# INLINE breadthFirst #-}
 
 -- | Depth-first strategy.
 depthFirst :: StepStrategy
-depthFirst = flip A.append
+depthFirst = flip (++)
 {-# INLINE depthFirst #-}
 
--- | Runs a forward chaining process starting with a list of tasks
--- over current Rete state represented by ReteM (Rete
--- state-monad). Uses strategy for agendas.
-forwardChainWithStrategy :: [Task] -> StepStrategy -> ReteM ()
-forwardChainWithStrategy []     _        = return ()
-forwardChainWithStrategy (t:ts) strategy = do
-  newAgenda <- liftM (strategy (A.fromList ts)) (taskValue t)
-  forwardChainWithStrategy (A.toList newAgenda) strategy
+forwardStep :: StepStrategy -> (Agenda, ReteState) -> (Agenda, ReteState)
+forwardStep strategy (agenda, state) = run state newAgenda
+  where
+    newAgenda = case agenda of
+      []     -> return []
+      (t:ts) -> liftM (strategy ts) (taskValue t)
 
--- | Equivalent of (`forwardChainWithStrategy` breadthFirst)
-forwardChain :: [Task] -> ReteM ()
-forwardChain = (`forwardChainWithStrategy` breadthFirst)
-{-# INLINE forwardChain #-}
+forwardChain :: StepStrategy -> Agenda -> ReteState -> [(Agenda, ReteState)]
+forwardChain strategy agenda state =
+  takeWhileI haveSomeWork (iterate (forwardStep strategy) (agenda, state))
+  where
+    haveSomeWork (a, _) = not (null a)
 
 -- ADDING PRODUCTIONS
 
@@ -367,6 +365,6 @@ passAction _ = []
 -- | An action that traces a predefined text on execution.
 traceAction :: String -> Action
 traceAction s Actx { actxProd = prod } =
-  [Task { taskValue    = traceM s >> return A.empty
+  [Task { taskValue    = traceM s >> return []
         , taskPriority = 0
         , taskProd     = Just prod }]

@@ -237,13 +237,13 @@ noJoinChildren state =
 
 leftActivateProd :: Tok -> Wme -> Prod -> ReteM Agenda
 leftActivateProd tok wme prod@Prod { prodPreds    = preds
-                                   , prodAction   = action
-                                   , prodBindings = bindings }  = do
+                                   , prodAction   = action }  = do
   let newTok     = wme:tok
-      matching p = p bindings newTok
+      actx       = Actx prod newTok
+      matching p = p actx
 
   if all matching preds
-    then return (map withThisProd (action (Actx prod newTok)))
+    then return (map withThisProd (action actx))
     else return []
 
   where withThisProd task = task { taskProd = Just prod }

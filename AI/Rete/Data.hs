@@ -8,7 +8,83 @@
 -- Maintainer  : kongra@gmail.com
 -- Stability   : experimental
 ------------------------------------------------------------------------
-module AI.Rete.Data where
+module AI.Rete.Data
+    (
+      ReteM
+
+    , Rete (..)
+    , ReteState
+    , reteId
+    , reteAmems
+    , reteAmemStates
+    , reteBmemStates
+    , reteJoinStates
+    , reteWmes
+    , reteWmesByObj
+    , reteWmesByAttr
+    , reteWmesByVal
+    , reteConstants
+    , reteVariables
+
+    , emptyRete
+
+    , Amem (..)
+    , AmemState (..)
+    , amemWmes
+    , amemWmesByObj
+    , amemWmesByAttr
+    , amemWmesByVal
+    , amemSuccessors
+
+    , Bmem (..)
+    , BmemState (..)
+    , bmemToks
+    , bmemChildren
+
+    , Join (..)
+    , JoinState (..)
+    , JoinTest (..)
+    , joinChildBmem
+    , joinChildProds
+
+    , Prod (..)
+    , Pred
+
+    , Id
+
+    , Constant (..)
+    , Variable (..)
+    , ConstantOrVariable (..)
+    , wildcardConstant
+    , emptyConstant
+
+    , dtn
+
+    , Obj (..)
+    , Attr (..)
+    , Val (..)
+
+    , Wme (..)
+    , WmesIndex
+
+    , Tok
+
+    , Agenda
+    , Task (..)
+
+    , Primitive (..)
+    , NamedPrimitive (..)
+
+    , Field (..)
+    , Location (..)
+    , Bindings
+
+    , Actx (..)
+    , Action
+
+    , Cond (..)
+    )
+    where
 
 import qualified Control.Monad.Trans.State.Strict as S
 import qualified Data.HashMap.Strict as Map
@@ -419,7 +495,7 @@ data Prod =
   , prodBindings :: !Bindings }
 
 -- | A predicate on Toks.
-type Pred = Bindings -> Tok -> Bool
+type Pred = Actx -> Bool
 
 -- | Symbol location describes the binding for a variable within a token.
 data Location = Location !Int !Field

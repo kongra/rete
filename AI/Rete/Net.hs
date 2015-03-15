@@ -13,7 +13,7 @@ module AI.Rete.Net where
 import           AI.Rete.Data
 import           AI.Rete.Flow
 import           AI.Rete.State
-import           Control.Monad (liftM, liftM3, forM_)
+import           Control.Monad (liftM, liftM3, forM, forM_, when)
 import qualified Data.HashMap.Strict as Map
 import qualified Data.HashSet as Set
 import           Data.Maybe (isJust, fromJust)
@@ -63,7 +63,7 @@ createAmemState state o a v = loop wmes Map.empty Map.empty Map.empty
     (Val  v') = v
     isWild  s = s == wildcardConstant
     wmes      = Set.toList (wmesForAmemFeed (isWild o') (isWild a') (isWild v')
-                                            state o a v)
+                            state o a v)
 
     loop []        i1 i2 i3 = AmemState wmes i1 i2 i3 []
     loop (w:wmes') i1 i2 i3 = let (Wme wo wa wv) = w in
@@ -250,7 +250,7 @@ toCond (C o a v) = liftM3 Cond o a v
 bindingsForConds :: Int -> [IndexedCond] -> Bindings
 bindingsForConds tokLen = loop Map.empty
   where
-    loop result []                                           = result
+    loop result []                                        = result
     loop result ((i, Cond (Obj o) (Attr a) (Val v)) : cs) =
       loop result3 cs
       where
@@ -303,6 +303,74 @@ valM v actx = do
   case result of { ValidVarVal c' -> return (Just c'); _ -> return Nothing }
 {-# INLINE valM #-}
 
+-- ADDING PRODUCTIONS
+
+-- | Creates a task with default priority (0) that represents adding a
+-- (Prod)uction.
+addProd :: [C] -> [Pred] -> Action -> Task
+addProd conds preds action = addProdP conds preds action 0
+{-# INLINE addProd #-}
+
+-- | Creates a task with given priority that represents adding a (Prod)uction.
+addProdP :: [C] -> [Pred] -> Action -> Int -> Task
+addProdP conds preds action priority =
+  Task (addProdA conds preds action) priority Nothing
+{-# INLINE addProdP #-}
+
+-- | Creates the Agenda in Rete monad that represents adding a (Prod)uction.
+addProdA :: [C] -> [Pred] -> Action -> ReteM Agenda
+addProdA cs preds action = do
+  when (null cs)
+    (error "ERROR (4): PRODUCTION MUST HAVE AT LEAST 1 CONDITION (0 GIVEN).")
+
+  conds <- mapM toCond cs
+
+  -- Build or share dummy (top-level) Join with no tests for first Cond.
+  let Cond o a v : _ = conds
+  dummyAmem <- buildOrShareAmem o a v
+  dummyJoin <- buildOrShareJoin dtn dummyAmem []
+
+  -- Build or share joins for the rest of conditions (if any).
+  let ics      = indexedConds conds
+      ic1:ics' = ics
+  parent      <- buildOrShareJoins dummyJoin ics' [ic1]
+  parentState <- viewS parent
+  let parentBmem  = view joinChildBmem  parentState
+      parentProds = view joinChildProds parentState
+
+  -- Prepare bindings.
+  let bindings = bindingsForConds (length ics) (reverse ics)
+
+  -- Create Prod.
+  let prod = Prod { prodPreds    = preds
+                  , prodAction   = action
+                  , prodBindings = bindings }
+
+  -- Update prod with matches from above.
+  -- 1. Set prod as a single child of parent (last join).
+  setS parent $ JoinState Nothing [prod]
+
+  -- 2. Right-activate parent
+  amemState <- viewS (joinAmem parent)
+  agendas <- forM (view amemWmes amemState) $ \wme ->
+    rightActivateJoin wme parent
+
+  -- 3. Restore parent state with prod inside.
+  setS parent $ JoinState parentBmem (prod:parentProds)
+
+  return (concat agendas)
+
+buildOrShareJoins :: Join -> [IndexedCond] -> [IndexedCond] -> ReteM Join
+buildOrShareJoins higherJoin []       _            = return higherJoin
+buildOrShareJoins higherJoin (ic:ics) earlierConds = do
+  let (_, Cond o a v) = ic
+      tests           = joinTestsForCond ic earlierConds
+  amem   <- buildOrShareAmem o a v
+  parent <- buildOrShareBmem higherJoin
+  join   <- buildOrShareJoin parent amem tests
+
+  buildOrShareJoins join ics (ic:earlierConds)
+
 -- FORWARD CHAINING
 
 -- | Evaluation strategy for Agendas.
@@ -341,23 +409,6 @@ exec :: StepStrategy -> Agenda -> ReteState -> ReteState
 exec strategy agenda = snd . last . forwardChain strategy agenda
 {-# INLINE exec #-}
 
--- ADDING PRODUCTIONS
-
--- | Creates a task with default priority (0) that represents adding a
--- (Prod)uction.
-addProd :: [C] -> Action -> Task
-addProd conds action = addProdP conds action 0
-{-# INLINE addProd #-}
-
--- | Creates a task with given priority that represents adding a (Prod)uction.
-addProdP :: [C] -> Action -> Int -> Task
-addProdP conds action priority = Task (addProdA conds action) priority Nothing
-{-# INLINE addProdP #-}
-
--- | Creates the Agenda in Rete monad that represents adding a (Prod)uction.
-addProdA :: [C] -> Action -> ReteM Agenda
-addProdA = undefined
-
 -- SOME PREDEFINED ACTIONS AND RELATED UTILITIES
 
 -- | Composes the passed Actions.
@@ -376,3 +427,13 @@ traceAction s Actx { actxProd = prod } =
   [Task { taskValue    = traceM s >> return []
         , taskPriority = 0
         , taskProd     = Just prod }]
+
+silnia :: Integer -> Integer
+silnia 0 = 1
+silnia n = n * silnia (n-1)
+
+potega :: Integer -> Integer -> Integer
+potega _ 0 = 1
+potega a n = a * potega a (n-1)
+
+-- Piotr Ścibiorek - wpisać oceny - warstwy integracji 5.

@@ -8,7 +8,35 @@
 -- Maintainer  : kongra@gmail.com
 -- Stability   : experimental
 ------------------------------------------------------------------------
-module AI.Rete.Net where
+module AI.Rete.Net
+    (
+      -- * Adding productions
+      addProd
+    , addProdP
+
+      -- * Creating conditions
+    , c
+
+      -- * Variable value access
+    , val
+    , valE
+    , valM
+
+      -- * Strategies
+    , StepStrategy
+    , breadthFirst
+    , depthFirst
+
+      -- * Forward chaining
+    , forwardChain
+    , exec
+
+      -- * Predefined actions and tools
+    , acompose
+    , passAction
+    , traceAction
+    )
+    where
 
 import           AI.Rete.Data
 import           AI.Rete.Flow
@@ -85,40 +113,40 @@ wmesForAmemFeed False False False state o a v =
     s3 = Map.lookupDefault Set.empty v (view reteWmesByVal  state)
 
 wmesForAmemFeed False False True state o a _ =
-  -- o a *
+  -- o a [*]
   s1 `Set.intersection` s2
   where
     s1 = Map.lookupDefault Set.empty o (view reteWmesByObj  state)
     s2 = Map.lookupDefault Set.empty a (view reteWmesByAttr state)
 
 wmesForAmemFeed False True False state o _ v =
-  -- o * v
+  -- o [*] v
   s1 `Set.intersection` s2
   where
     s1 = Map.lookupDefault Set.empty o (view reteWmesByObj state)
     s2 = Map.lookupDefault Set.empty v (view reteWmesByVal state)
 
 wmesForAmemFeed False True True state o _ _ =
-  -- o * *
+  -- o [*] [*]
   Map.lookupDefault Set.empty o (view reteWmesByObj state)
 
 wmesForAmemFeed True False False state _ a v =
-  -- * a v
+  -- [*] a v
   s1 `Set.intersection` s2
   where
     s1 = Map.lookupDefault Set.empty a (view reteWmesByAttr state)
     s2 = Map.lookupDefault Set.empty v (view reteWmesByVal  state)
 
 wmesForAmemFeed True False True state _ a _ =
-  -- * a *
+  -- [*] a [*]
   Map.lookupDefault Set.empty a (view reteWmesByAttr state)
 
 wmesForAmemFeed True True False state _ _ v =
-  -- * * v
+  -- [*] [*] v
   Map.lookupDefault Set.empty v (view reteWmesByVal state)
 
 wmesForAmemFeed True True True state _ _ _ =
-  -- * * *
+  -- [*] [*] [*]
   view reteWmes state
 {-# INLINE wmesForAmemFeed #-}
 
@@ -427,13 +455,5 @@ traceAction s Actx { actxProd = prod } =
   [Task { taskValue    = traceM s >> return []
         , taskPriority = 0
         , taskProd     = Just prod }]
-
-silnia :: Integer -> Integer
-silnia 0 = 1
-silnia n = n * silnia (n-1)
-
-potega :: Integer -> Integer -> Integer
-potega _ 0 = 1
-potega a n = a * potega a (n-1)
 
 -- Piotr Ścibiorek - wpisać oceny - warstwy integracji 5.

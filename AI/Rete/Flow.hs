@@ -11,7 +11,24 @@
 -- Maintainer  : kongra@gmail.com
 -- Stability   : experimental
 ------------------------------------------------------------------------
-module AI.Rete.Flow where
+module AI.Rete.Flow
+    (
+      -- * Adding Wmes
+      addWme
+    , addWmeP
+
+      -- * Variables
+      , Var
+      , var
+
+      -- * Internals
+    , genid
+    , wmesIndexInsert
+    , rightActivateJoin
+    , ToConstantOrVariable (..)
+    , fieldConstant
+    )
+    where
 
 import           AI.Rete.Data
 import           AI.Rete.State

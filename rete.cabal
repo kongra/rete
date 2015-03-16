@@ -22,6 +22,7 @@ library
                      AI.Rete.State
                      AI.Rete.Flow
                      AI.Rete.Net
+                     AI.Rete
 
   other-extensions:  Safe
   build-depends:     base >=4.7 && <4.8

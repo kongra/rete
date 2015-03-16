@@ -71,7 +71,8 @@ buildOrShareAmem (Obj o) (Attr a) (Val v) = do
     Just amem -> return amem  -- Happily found.
     Nothing   -> do
       -- Let's create new Amem.
-      amem  <- liftM Amem genid
+      i <- genid
+      let amem = Amem i o' a' v'
       state <- viewS Rete
       let amemState = createAmemState state o' a' v'
 

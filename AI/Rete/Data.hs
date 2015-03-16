@@ -310,6 +310,9 @@ dtt = []
 -- | Represents the Rete network.
 data Rete = Rete
 
+-- | Rete State Monad.
+type ReteM a = S.State ReteState a
+
 data ReteState =
   ReteState
   { _reteId            :: !Id
@@ -387,15 +390,26 @@ emptyRete =
 -- NETWORK
 
 -- | Alpha memory.
-newtype Amem = Amem Id deriving Eq
+data Amem =
+  Amem
+  {
+    amemId   :: !Id
+  , amemObj  :: !(Obj  Constant)
+  , amemAttr :: !(Attr Constant)
+  , amemVal  :: !(Val  Constant)
+  }
 
 instance Show Amem where
-  show (Amem i) = 'B' : show i
+  show amem = 'B' : show (amemId amem)
   {-# INLINE show #-}
 
 instance Hashable Amem where
-  hashWithSalt salt (Amem i) = salt `hashWithSalt` i
+  hashWithSalt salt amem = salt `hashWithSalt` amemId amem
   {-# INLINE hashWithSalt #-}
+
+instance Eq Amem where
+  Amem { amemId = i1 } == Amem { amemId = i2 } = i1 == i2
+  {-# INLINE (==) #-}
 
 data AmemState =
   AmemState
@@ -504,9 +518,6 @@ data Location = Location !Int !Field
 type Bindings = Map.HashMap Variable Location
 
 -- EVALUATION
-
--- | Rete state-monad.
-type ReteM a = S.State ReteState a
 
 -- | Context of a production action.
 data Actx = Actx { actxProd :: !Prod, actxTok :: !Tok }

@@ -80,7 +80,6 @@ buildOrShareAmem (Obj o) (Attr a) (Val v) = do
             . over reteAmemStates (Map.insert amem amemState)) Rete
 
       return amem
-{-# INLINE buildOrShareAmem #-}
 
 createAmemState :: ReteState
                 -> Obj Constant -> Attr Constant -> Val Constant
@@ -99,7 +98,6 @@ createAmemState state o a v = loop wmes Map.empty Map.empty Map.empty
       loop wmes' (wmesIndexInsert wo w i1)
                  (wmesIndexInsert wa w i2)
                  (wmesIndexInsert wv w i3)
-{-# INLINE createAmemState #-}
 
 wmesForAmemFeed :: Bool -> Bool -> Bool
                 -> ReteState
@@ -149,7 +147,6 @@ wmesForAmemFeed True True False state _ _ v =
 wmesForAmemFeed True True True state _ _ _ =
   -- [*] [*] [*]
   view reteWmes state
-{-# INLINE wmesForAmemFeed #-}
 
 -- BETA MEMORY CREATION
 
@@ -175,15 +172,13 @@ buildOrShareBmem parent = do
       -- 3. Restore parent state with bmem inside.
       setS parent $ JoinState (Just bmem) (view joinChildProds parentState)
       return bmem
-{-# INLINE buildOrShareBmem #-}
 
--- -- JOIN TESTS
+-- JOIN TESTS
 
 type IndexedCond = (Int, Cond)
 
 indexedConds :: [Cond] -> [IndexedCond]
 indexedConds = zip [0 ..]
-{-# INLINE indexedConds #-}
 
 fieldEqualTo :: Cond -> ConstantOrVariable -> Maybe Field
 fieldEqualTo (Cond (Obj o) (Attr a) (Val v)) s
@@ -191,13 +186,11 @@ fieldEqualTo (Cond (Obj o) (Attr a) (Val v)) s
   | a == s    = Just A
   | v == s    = Just V
   | otherwise = Nothing
-{-# INLINE fieldEqualTo #-}
 
 matchingLocation :: ConstantOrVariable -> IndexedCond -> Maybe Location
 matchingLocation s (i, cond) = case fieldEqualTo cond s of
   Nothing -> Nothing
   Just f  -> Just (Location i f)
-{-# INLINE matchingLocation #-}
 
 joinTestForField :: Int -> ConstantOrVariable -> Field -> [IndexedCond]
                  -> Maybe JoinTest
@@ -210,7 +203,6 @@ joinTestForField i v field earlierConds =
     JustConstant _ -> Nothing -- No tests from Consts (non-Vars).
   where
     matches = map fromJust . filter isJust . map (matchingLocation v)
-{-# INLINE joinTestForField #-}
 
 joinTestsForCondImpl :: Int
                      -> Obj  ConstantOrVariable
@@ -227,11 +219,9 @@ joinTestsForCondImpl i (Obj o) (Attr a) (Val v) earlierConds =
     result1 = [fromJust test3 | isJust test3]
     result2 = if isJust test2 then fromJust test2 : result1 else result1
     result3 = if isJust test1 then fromJust test1 : result2 else result2
-{-# INLINE joinTestsForCondImpl #-}
 
 joinTestsForCond :: IndexedCond -> [IndexedCond] -> [JoinTest]
 joinTestsForCond (i, Cond o a v) = joinTestsForCondImpl i o a v
-{-# INLINE joinTestsForCond #-}
 
 -- JOIN CREATION
 
@@ -251,7 +241,6 @@ buildOrShareJoin parent amem tests = do
       -- Register join as its parent's child.
       setS parent (over bmemChildren (join:) parentState)
       return join
-{-# INLINE buildOrShareJoin #-}
 
 -- CREATING CONDITIONS (USER SIDE)
 
@@ -262,17 +251,14 @@ data C = C !(ReteM (Obj  ConstantOrVariable))
 
 toField :: ToConstantOrVariable a => (ConstantOrVariable -> b) -> a -> ReteM b
 toField f = liftM f . toConstantOrVariable
-{-# INLINE toField #-}
 
 -- | Creates a positive condition.
 c :: (ToConstantOrVariable o, ToConstantOrVariable a, ToConstantOrVariable v)
   => o -> a -> v -> C
 c o a v = C (toField Obj o) (toField Attr a) (toField Val v)
-{-# INLINE c #-}
 
 toCond :: C -> ReteM Cond
 toCond (C o a v) = liftM3 Cond o a v
-{-# INLINE toCond #-}
 
 -- CONFIGURING AND ACCESSING VARIABLE BINDINGS (IN ACTIONS)
 
@@ -287,7 +273,6 @@ bindingsForConds tokLen = loop Map.empty
         result2 = bindingsForCond a A d result1
         result3 = bindingsForCond v V d result2
         d       = tokLen - i - 1
-{-# INLINE bindingsForConds #-}
 
 bindingsForCond :: ConstantOrVariable -> Field -> Int -> Bindings -> Bindings
 bindingsForCond s f d result = case s of
@@ -296,7 +281,6 @@ bindingsForCond s f d result = case s of
   -- For vars avoid overriding existing bindings.
   JustVariable v -> if   Map.member v result    then result
                     else Map.insert v (Location d f) result
-{-# INLINE bindingsForCond #-}
 
 -- | A value of a variable inside an action.
 data VarVal = ValidVarVal   !Constant
@@ -305,7 +289,6 @@ data VarVal = ValidVarVal   !Constant
 instance Show VarVal where
   show (ValidVarVal s ) = show s
   show (NoVarVal    v ) = "ERROR (3): NO VALUE FOR VAR " ++ show v  ++ "."
-  {-# INLINE show #-}
 
 -- | Returns a value of a variable inside an Action.
 val :: Var -> Actx -> ReteM VarVal
@@ -323,14 +306,12 @@ valE :: Var -> Actx -> ReteM Constant
 valE v actx = do
   result <- val v actx
   case result of { ValidVarVal c' -> return c'; _ -> error (show result) }
-{-# INLINE valE #-}
 
 -- | Works like valE, but returns Nothing instead of raising an error.
 valM :: Var -> Actx -> ReteM (Maybe Constant)
 valM v actx = do
   result <- val v actx
   case result of { ValidVarVal c' -> return (Just c'); _ -> return Nothing }
-{-# INLINE valM #-}
 
 -- ADDING PRODUCTIONS
 
@@ -338,13 +319,11 @@ valM v actx = do
 -- (Prod)uction.
 addProd :: [C] -> [Pred] -> Action -> Task
 addProd conds preds action = addProdP conds preds action 0
-{-# INLINE addProd #-}
 
 -- | Creates a task with given priority that represents adding a (Prod)uction.
 addProdP :: [C] -> [Pred] -> Action -> Int -> Task
 addProdP conds preds action priority =
   Task (addProdA conds preds action) priority Nothing
-{-# INLINE addProdP #-}
 
 -- | Creates the Agenda in Rete monad that represents adding a (Prod)uction.
 addProdA :: [C] -> [Pred] -> Action -> ReteM Agenda
@@ -410,12 +389,10 @@ type StepStrategy = Agenda  -- ^ Current Agenda.
 -- | Breadth-first strategy.
 breadthFirst :: StepStrategy
 breadthFirst = (++)
-{-# INLINE breadthFirst #-}
 
 -- | Depth-first strategy.
 depthFirst :: StepStrategy
 depthFirst = flip (++)
-{-# INLINE depthFirst #-}
 
 forwardStep :: StepStrategy -> (Agenda, ReteState) -> (Agenda, ReteState)
 forwardStep strategy (agenda, state) = run state newAgenda
@@ -436,7 +413,6 @@ forwardChain strategy agenda state =
 -- agenda and state.
 exec :: StepStrategy -> Agenda -> ReteState -> ReteState
 exec strategy agenda = snd . last . forwardChain strategy agenda
-{-# INLINE exec #-}
 
 -- SOME PREDEFINED ACTIONS AND RELATED UTILITIES
 

@@ -484,7 +484,6 @@ showJoinTest
                     , shows d,  showString ","
                     , shows f2
                     , showString "⟩"])
-{-# INLINE showJoinTest #-}
 
 -- PRINT IMPLEMENTATION
 
@@ -493,13 +492,11 @@ showJoinTest
 toShowS :: Vnable a => Depth -> Switch -> a -> ReteM ShowS
 toShowS d switch obj = printTree (switches conf) (toVn cleanVisited obj)
   where switches = d . applySwitch switch
-{-# INLINE toShowS #-}
 
 -- | Works like toShowS, but returns String instead of ShowS
 toString :: Vnable a => Depth -> Switch -> a -> ReteM String
 toString d switch = liftM evalShowS . toShowS d switch
   where evalShowS s = s ""
-{-# INLINE toString #-}
 
 -- ACTIONS AND RELATED UTILS
 

@@ -35,6 +35,7 @@ module AI.Rete.Net
     , acompose
     , passAction
     , traceAction
+    , traceMsgAction
     )
     where
 
@@ -350,7 +351,9 @@ addProdA cs preds action = do
   let bindings = bindingsForConds (length ics) (reverse ics)
 
   -- Create Prod.
-  let prod = Prod { prodPreds    = preds
+  i <- genid
+  let prod = Prod { prodId       = i
+                  , prodPreds    = preds
                   , prodAction   = action
                   , prodBindings = bindings }
 
@@ -426,11 +429,14 @@ acompose as actx = concatMap passActx as
 passAction :: Action
 passAction _ = []
 
--- | An action that traces a predefined text on execution.
-traceAction :: String -> Action
-traceAction s Actx { actxProd = prod } =
-  [Task { taskValue    = traceM s >> return []
+-- | Action that traces a text on execution. The text is generated
+-- by the passed function f.
+traceAction :: (Actx -> ReteM String) -> Action
+traceAction f actx =
+  [Task { taskValue    = f actx >>= traceM >> return []
         , taskPriority = 0
-        , taskProd     = Just prod }]
+        , taskProd     = Just (actxProd actx) }]
 
--- Piotr Ścibiorek - wpisać oceny - warstwy integracji 5.
+-- | Action that traces a predefined message.
+traceMsgAction :: String -> Action
+traceMsgAction = traceAction . const . return

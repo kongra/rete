@@ -475,9 +475,19 @@ joinChildProds f s = fmap (\v -> s { _joinChildProds = v} ) (f (_joinChildProds 
 -- | Production node.
 data Prod =
   Prod
-  { prodPreds    :: [Pred]
+  { prodId       :: !Id
+  , prodPreds    :: ![Pred]
   , prodAction   :: !Action
   , prodBindings :: !Bindings }
+
+instance Show Prod where
+  show prod = 'P' : show (prodId prod)
+
+instance Hashable Prod where
+  hashWithSalt salt prod = salt `hashWithSalt` prodId prod
+
+instance Eq Prod where
+  prod1 == prod2 = prodId prod1 == prodId prod2
 
 -- | A predicate on Toks.
 type Pred = Actx -> Bool

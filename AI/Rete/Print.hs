@@ -17,66 +17,51 @@
 -- Textual visualization of Rete network and data.
 ------------------------------------------------------------------------
 module AI.Rete.Print
-    -- (
-    --   -- * Print methods
-    --   toShowS
-    -- , toString
+    (
+      -- * Print methods
+      toShowS
+    , toString
 
-    --   -- * The 'Depth' constraints of the tree traversal process
-    -- , Depth
-    -- , depth
-    -- , boundless
+      -- * The 'Depth' constraints of the tree traversal process
+    , Depth
+    , depth
+    , boundless
 
-    --   -- * 'Switch'es
-    -- , Switch
-    -- , with, no, clear
+      -- * 'Switch'es
+    , Switch
+    , with, no, clear
 
-    --   -- * Predefined compound 'Switch'es
-    -- , netTopDown
-    -- , netBottomUp
-    -- , nonVerboseData
+      -- * Predefined 'Switch'es
+    , withNet
+    , noNet
+    , withData
+    , noData
 
-    --   -- * Predefined 'Switch'es
-    -- , withNet
-    -- , noNet
-    -- , withData
-    -- , noData
-    -- , up
-    -- , down
-    -- , withIds
-    -- , noIds
+      -- * Actions and related utils
+    , traceTokAction
+    , traceVarAction
 
-    --   -- * Actions and related utils
-    -- , traceTokAction
-    -- , traceTokActionD
-    -- , traceVarAction
-
-    --   -- * 'Flag's (detailed)
-    -- , Flag (..)
-    -- )
+      -- * 'Flag's (detailed)
+    , Flag (..)
+    )
     where
 
 import           AI.Rete.Data
+import           AI.Rete.Flow
+import           AI.Rete.Net (traceAction, valE)
 import           AI.Rete.State
 import           Control.Monad (liftM)
 import qualified Control.Monad.Trans.State.Strict as S
 import           Data.Foldable (Foldable)
+import qualified Data.HashMap.Strict as Map
 import qualified Data.HashSet as Set
 import           Data.Hashable (Hashable, hashWithSalt)
 import           Data.List (intersperse)
 import           Data.Maybe (catMaybes)
 import           Data.Tree.Print
+import           Kask.Control.Lens
 import           Kask.Control.Monad (toListM)
 import           Kask.Data.Function (compose, rcompose)
-import           Kask.Control.Lens
-
--- import           AI.Rete.Flow
--- import qualified AI.Rete.Net as Net
--- import           Control.Concurrent.STM
--- import qualified Data.HashMap.Strict as Map
--- import           Data.Tree.Print
--- import           Debug.Trace
--- import           Kask.Control.Monad (toListM, mapMM)
 
 -- CONFIGURATION
 
@@ -87,13 +72,13 @@ data Flag =
 
   | AmemFields | AmemWmes | AmemWmesCount | AmemSuccessors
 
-  | Ids | NodeChildren
+  | NodeChildren
 
   | BmemToks | BmemToksCount
 
   | JoinTests  | JoinAmems
 
-  | Bindings deriving (Show, Eq)
+  | Bindings | PredsCount deriving (Show, Eq)
 
 flagCode :: Flag -> Int
 flagCode NetEmph        = 1
@@ -102,13 +87,13 @@ flagCode AmemFields     = 3
 flagCode AmemWmes       = 4
 flagCode AmemWmesCount  = 5
 flagCode AmemSuccessors = 6
-flagCode Ids            = 7
-flagCode NodeChildren   = 8
-flagCode BmemToks       = 9
-flagCode BmemToksCount  = 10
-flagCode JoinTests      = 11
-flagCode JoinAmems      = 12
-flagCode Bindings       = 13
+flagCode NodeChildren   = 7
+flagCode BmemToks       = 8
+flagCode BmemToksCount  = 9
+flagCode JoinTests      = 10
+flagCode JoinAmems      = 11
+flagCode Bindings       = 12
+flagCode PredsCount     = 13
 
 instance Hashable Flag where
   hashWithSalt salt flag = salt `hashWithSalt` flagCode flag
@@ -150,11 +135,11 @@ dataFlags =  [ AmemWmes
 netFlags :: [Flag]
 netFlags =  [ AmemFields
             , AmemSuccessors
-            , Ids
             , NodeChildren
             , JoinTests
             , JoinAmems
-            , Bindings ]
+            , Bindings
+            , PredsCount ]
 
 -- | A 'Switch' that turns data presentation off.
 noData :: Switch
@@ -176,12 +161,14 @@ withNet = compose (map with netFlags)
 
 data Visited = Visited { visitedAmems :: !(Set.HashSet Amem)
                        , visitedBmems :: !(Set.HashSet Bmem)
-                       , visitedJoins :: !(Set.HashSet Join) }
+                       , visitedJoins :: !(Set.HashSet Join)
+                       , visitedProds :: !(Set.HashSet Prod) }
 
 cleanVisited :: Visited
 cleanVisited =  Visited { visitedAmems = Set.empty
                         , visitedBmems = Set.empty
-                        , visitedJoins = Set.empty }
+                        , visitedJoins = Set.empty
+                        , visitedProds = Set.empty }
 
 class Visitable a where
   visiting :: a -> Visited -> Visited
@@ -198,6 +185,10 @@ instance Visitable Bmem where
 instance Visitable Join where
   visiting join vs = vs { visitedJoins = Set.insert join (visitedJoins vs) }
   visited  join vs = Set.member join (visitedJoins vs)
+
+instance Visitable Prod where
+  visiting prod vs = vs { visitedProds = Set.insert prod (visitedProds vs) }
+  visited  prod vs = Set.member prod (visitedProds vs)
 
 withEllipsis :: Bool -> ShowS -> ReteM ShowS
 withEllipsis False s = return s
@@ -252,20 +243,6 @@ labelVn vs label adjs' = Vn { vnShowM   = \_ _ -> return label
 -- subnodes (Vns).
 labeledLeavesVn :: Visited -> ShowS -> [VnShow] -> Vn
 labeledLeavesVn vs label shows' = labelVn vs label (map (leafVn vs) shows')
-
--- | Generates a ShowS representation of an Id.
-idS :: Id -> ShowS
-idS id' = compose [showString " ", showString $ show id']
-
--- | Composes the passed ShowS with a representation of the Id.
-withIdS :: ShowS -> Id -> ShowS
-withIdS s id' = compose [s, idS id']
-
--- | Works like withIdS, but uses the Id representation optionally,
--- depending on the passed flag.
-withOptIdS :: Bool -> ShowS -> Id -> ShowS
-withOptIdS False s _   = s
-withOptIdS True  s id' = s `withIdS` id'
 
 -- | Converts the monadic foldable into a sequence of Vns. All in the
 -- m monad.
@@ -382,7 +359,10 @@ showAmem amem flags vs = do
   withEllipsisM (visited amem vs) $
     if is AmemWmesCount flags
       then (do wmes <- liftM (view amemWmes) (viewS amem)
-               return $ compose [repr, showString " wc ", shows (length wmes)])
+               return $ compose [ repr
+                                , showString ", "
+                                , shows (length wmes)
+                                , showString " wmes"])
       else return repr
 
 amemAdjs :: Amem -> Flags -> Visited -> ReteM [Vn]
@@ -398,220 +378,141 @@ amemAdjs amem flags vs = whenNot (visited amem vs) $ do
 
 -- BMEM VIS.
 
--- instance Vnable Bmem where
---   toVnAdjs = bmemAdjs
---   toVnShow = showBmem
+instance Vnable Bmem where
+  toVnAdjs = bmemAdjs
+  toVnShow = showBmem
 
--- showBmem :: Bmem -> Flags -> Visited -> STM ShowS
--- showBmem bmem flags vs = withEllipsis (visited bmem vs) $
---   withOptIdS (is NodeIds flags) (showString "B") (bmemId bmem)
+showBmem :: Bmem -> Flags -> Visited -> ReteM ShowS
+showBmem bmem flags vs = withEllipsisM (visited bmem vs) $
+  if is BmemToksCount flags
+    then (do toks <- liftM (view bmemToks) (viewS bmem)
+             return $ compose [ shows bmem
+                              , showString ", "
+                              , shows (length toks)
+                              , showString " toks"])
+    else return (shows bmem)
 
--- bmemAdjs :: Bmem -> Flags -> Visited -> STM [Vn]
--- bmemAdjs bmem flags vs = whenNot (visited bmem vs) $ do
---   let vs'    = visiting   bmem vs
---       parent = bmemParent bmem
---       toks   = bmemToks   bmem
+bmemAdjs :: Bmem -> Flags -> Visited -> ReteM [Vn]
+bmemAdjs bmem flags vs = whenNot (visited bmem vs) $ do
+  let vs'    = visiting          bmem vs
+  bmemState <- viewS             bmem
+  let chld   = view bmemChildren bmemState
+      toks   = view bmemToks     bmemState
 
---   pVn   <- netVn flags (is NodeParents flags) "parent" vs' (return [parent])
---   tVn   <- datVn flags (is BmemToks    flags) "toks"   vs' (readTVar toks)
-
---   allC  <- liftM Map.elems (readTVar (bmemAllChildren bmem))
---   c     <- readTVar (bmemChildren bmem)
---   let c' = Set.fromList allC `Set.union` c
---   cVn   <- netVn flags (is NodeChildren flags) "children (all)" vs' (return c')
-
---   optVns [pVn, cVn, tVn]
+  childrenVn <- netVn flags (is NodeChildren flags) "children" vs' (return chld)
+  toksVn     <- datVn flags (is BmemToks     flags) "toks"     vs' (return toks)
+  optVns [childrenVn, toksVn]
 
 -- JOIN VIS.
 
 instance Vnable Join where
-  toVnAdjs = undefined -- joinAdjs
-  toVnShow = undefined -- showJoin
+  toVnAdjs = joinAdjs
+  toVnShow = showJoin
 
--- showJoin :: Join -> Flags -> Visited -> STM ShowS
--- showJoin join flags vs = withEllipsisT (visited join vs) $ do
---   let lu = joinLeftUnlinked  join
---       ru = joinRightUnlinked join
+showJoin :: Join -> Flags -> Visited -> ReteM ShowS
+showJoin join _ vs = withEllipsisM (visited join vs) $ return (shows join)
 
---   s <- if is Uls flags
---          then (do mark <- ulMark lu ru
---                   return (showString ("J " ++ mark)))
---          else return (showString "J")
+joinAdjs :: Join -> Flags -> Visited -> ReteM [Vn]
+joinAdjs join flags vs = whenNot (visited join vs) $ do
+  let vs' = visiting join vs
+  joinState <- viewS join
+  let bmem = case view joinChildBmem joinState of
+        Nothing -> []
+        Just b  -> [b]
 
---   return (withOptIdS (is NodeIds flags) s (joinId join))
+      prods = view joinChildProds joinState
+      tests = joinTests join
+      amem  = [joinAmem join]
 
--- joinAdjs :: Join -> Flags -> Visited -> STM [Vn]
--- joinAdjs join flags vs = whenNot (visited join vs) $ do
---   (bmem, negs, prods) <- joinChildren join
---   let vs'       = visiting            join vs
---       parent    = joinParent          join
---       tests     = joinTests           join
---       amem      = joinAmem            join
---       ancestor  = joinNearestAncestor join
---       ancestor' = return $ case ancestor of { Just a  -> [a]; Nothing -> [] }
---       childBmem = return $ case bmem     of { Just b  -> [b]; Nothing -> [] }
+  amemVn  <- netVn flags (is JoinAmems    flags) "amem"          vs' (return amem)
+  testsVn <- netVn flags (is JoinTests    flags) "tests"         vs' (return tests)
+  bmemVn  <- netVn flags (is NodeChildren flags) "(child) bmem"  vs' (return bmem)
+  prodsVn <- netVn flags (is NodeChildren flags) "(child) prods" vs' (return prods)
 
---   pVn  <- netVn flags (is NodeParents  flags) "parent" vs' (return [parent])
+  optVns [amemVn, testsVn, bmemVn, prodsVn]
 
---   cbVn <- netVn flags (is NodeChildren flags) "child bmem"  vs' childBmem
---   cnVn <- netVn flags (is NodeChildren flags) "child negs"  vs' (return negs    )
---   cpVn <- netVn flags (is NodeChildren flags) "child prods" vs' (return prods   )
+-- PROD VIS.
 
---   tVn  <- netVn flags (is JoinTests            flags) "tests" vs' (return tests )
---   aVn  <- netVn flags (is JoinAmems            flags) "amem"  vs' (return [amem])
---   anVn <- netVn flags (is JoinNearestAncestors flags) "ancestor" vs' ancestor'
+instance Vnable Prod where
+  toVnAdjs = prodAdjs
+  toVnShow = showProd
 
---   optVns [pVn, aVn, anVn, tVn, cbVn, cnVn, cpVn]
+showProd :: Prod -> Flags -> Visited -> ReteM ShowS
+showProd prod flags vs = withEllipsisM (visited prod vs) $
+  if is PredsCount flags
+    then return $ compose [ shows prod
+                          , showString ", "
+                          , shows (length (prodPreds prod))
+                          , showString " preds"]
+    else return (shows prod)
 
--- instance Vnable (Either Dtn Bmem) where
---   toVnAdjs (Left  dtn ) = toVnAdjs dtn
---   toVnAdjs (Right bmem) = toVnAdjs bmem
+prodAdjs :: Prod -> Flags -> Visited -> ReteM [Vn]
+prodAdjs prod flags vs = whenNot (visited prod vs) $ do
+  let vs' = visiting prod vs
+  bindingsVn <- netVn flags (is Bindings flags) "bindings" vs'
+                (varlocs (prodBindings prod))
+  optVns [bindingsVn]
 
---   toVnShow (Left  dtn ) = toVnShow dtn
---   toVnShow (Right bmem) = toVnShow bmem
+data VLoc = VLoc !Variable !Int !Field
 
--- -- PROD VIS.
+varlocs :: Bindings -> ReteM [VLoc]
+varlocs = return . map vbinding2VLoc . Map.toList
+  where vbinding2VLoc (s, Location d f) = VLoc s d f
 
--- instance Vnable Prod where
---   toVnAdjs = prodAdjs
---   toVnShow = showProd
---   {-# INLINE toVnShow #-}
---   {-# INLINE toVnAdjs #-}
+instance Vnable VLoc where
+  toVnAdjs _ _ _ = return []
+  toVnShow       = showVLoc
 
--- showProd :: Prod -> Flags -> Visited -> STM ShowS
--- showProd prod flags vs = withEllipsis (visited prod vs) $
---   withOptIdS (is NodeIds flags) (showString "P") (prodId prod)
--- {-# INLINE showProd #-}
+showVLoc :: VLoc -> Flags -> Visited -> ReteM ShowS
+showVLoc (VLoc s f d) _ _ =
+  return (compose [ shows s, showString " → "
+                  , shows d, showString ",", shows f])
 
--- prodAdjs :: Prod -> Flags -> Visited -> STM [Vn]
--- prodAdjs prod flags vs = whenNot (visited prod vs) $ do
---   let vs'      = visiting     prod vs
---       parent   = prodParent   prod
---       toks     = prodToks     prod
---       bindings = prodBindings prod
+-- JoinTest VIS.
 
---   pVn <- netVn flags (is NodeParents  flags) "parent" vs' (return   [parent])
---   vVn <- netVn flags (is ProdBindings flags) "vars"   vs' (varlocs  bindings)
---   tVn <- datVn flags (is ProdToks     flags) "toks"   vs' (readTVar toks    )
+instance Vnable JoinTest where
+  toVnAdjs _ _ _ = return []
+  toVnShow       = showJoinTest
 
---   optVns [vVn, pVn, tVn]
+showJoinTest :: JoinTest -> Flags -> Visited -> ReteM ShowS
+showJoinTest
+  JoinTest { joinField1   = f1
+           , joinField2   = f2
+           , joinDistance = d } _ _ =
+    return (compose [ showString "⟨"
+                    , shows f1, showString ","
+                    , shows d,  showString ","
+                    , shows f2
+                    , showString "⟩"])
+{-# INLINE showJoinTest #-}
 
--- instance Vnable (Either Join Neg) where
---   toVnAdjs (Left  join) = toVnAdjs join
---   toVnAdjs (Right neg ) = toVnAdjs neg
+-- PRINT IMPLEMENTATION
 
---   toVnShow (Left  join) = toVnShow join
---   toVnShow (Right neg ) = toVnShow neg
---   {-# INLINE toVnShow #-}
---   {-# INLINE toVnAdjs #-}
+-- | Converts the selected object to a tree representation (expressed
+-- in ShowS).
+toShowS :: Vnable a => Depth -> Switch -> a -> ReteM ShowS
+toShowS d switch obj = printTree (switches conf) (toVn cleanVisited obj)
+  where switches = d . applySwitch switch
+{-# INLINE toShowS #-}
 
--- -- VARIABLE LOCATIONS VIS.
+-- | Works like toShowS, but returns String instead of ShowS
+toString :: Vnable a => Depth -> Switch -> a -> ReteM String
+toString d switch = liftM evalShowS . toShowS d switch
+  where evalShowS s = s ""
+{-# INLINE toString #-}
 
--- data VLoc = VLoc !Variable !Int !Field
+-- ACTIONS AND RELATED UTILS
 
--- varlocs :: Bindings -> STM [VLoc]
--- varlocs = return . map vbinding2VLoc . Map.toList
---   where vbinding2VLoc (s, Location d f) = VLoc s d f
--- {-# INLINE varlocs #-}
+-- | Action that traces the matching token (prefixed).
+traceTokAction :: String -> Action
+traceTokAction prefix = traceAction dumpTok
+  where dumpTok Actx { actxTok = tok } =
+          return $ compose [showString prefix, showTok tok] ""
 
--- instance Vnable VLoc where
---   toVnAdjs = adjsVLoc
---   toVnShow = showVLoc
---   {-# INLINE toVnShow #-}
---   {-# INLINE toVnAdjs #-}
-
--- showVLoc :: VLoc -> Flags -> Visited -> STM ShowS
--- showVLoc (VLoc s f d) _ _ =
---   return (compose [ shows s, showString " → "
---                   , shows d, showString ",", shows f])
--- {-# INLINE showVLoc #-}
-
--- adjsVLoc :: VLoc -> Flags -> Visited -> STM [Vn]
--- adjsVLoc _ _ _ = return []
--- {-# INLINE adjsVLoc #-}
-
--- -- JoinTest VISUALIZATION
-
--- instance Vnable JoinTest where
---   toVnAdjs = adjsJoinTest
---   toVnShow = showJoinTest
---   {-# INLINE toVnShow #-}
---   {-# INLINE toVnAdjs #-}
-
--- showJoinTest :: JoinTest -> Flags -> Visited -> STM ShowS
--- showJoinTest
---   JoinTest { joinField1   = f1
---            , joinField2   = f2
---            , joinDistance = d } _ _ =
---     return (compose [ showString "⟨"
---                     , shows f1, showString ","
---                     , shows d,  showString ","
---                     , shows f2
---                     , showString "⟩"])
--- {-# INLINE showJoinTest #-}
-
--- adjsJoinTest :: JoinTest -> Flags -> Visited -> STM [Vn]
--- adjsJoinTest _ _ _ = return []
--- {-# INLINE adjsJoinTest #-}
-
--- -- Env VISUALIZATION
-
--- instance Vnable Env where
---   -- Currently, simply show Dtn. In future: add some report on Env.
---   toVnAdjs = toVnAdjs . envDtn
---   toVnShow = toVnShow . envDtn
---   {-# INLINE toVnShow #-}
---   {-# INLINE toVnAdjs #-}
-
--- -- PRINT IMPLEMENTATION
-
--- -- | Converts the selected object to a tree representation (expressed
--- -- in ShowS).
--- toShowS :: Vnable a => Depth -> Switch -> a -> STM ShowS
--- toShowS d switch obj = printTree (switches conf) (toVn cleanVisited obj)
---   where switches = d . applySwitch switch
--- {-# INLINE toShowS #-}
-
--- -- | Works like toShowS, but returns String instead of ShowS
--- toString :: Vnable a => Depth -> Switch -> a -> STM String
--- toString d switch = liftM evalShowS . toShowS d switch
---   where evalShowS s = s ""
--- {-# INLINE toString #-}
-
--- -- PREDEFINED PRINT CONFIGURATIONS
-
--- -- | A 'Switch' for presenting sole Rete net bottom-up.
--- netBottomUp :: Switch
--- netBottomUp = up . with NetEmph . withNet . withIds . with AmemFields
---             . with Uls
-
--- -- | A 'Switch' for presenting sole Rete net top-down.
--- netTopDown :: Switch
--- netTopDown = down . with NetEmph . withNet . withIds . with AmemFields
---            . with Uls
-
--- -- | A default verbosity level for presenting data.
--- nonVerboseData :: Switch
--- nonVerboseData = with BmemToks . with NegToks . with ProdToks . with TokWmes
---                . with TokNegJoinResults . no   WmeIds . no   TokIds
---                . with AmemWmes
-
--- -- ACTIONS AND RELATED UTILS
-
--- -- | Action that traces the matching token.
--- traceTokAction :: Depth -> Switch -> String -> Action
--- traceTokAction d switch prefix actx = do
---   s <- toShowS d switch (actxTok actx)
---   let s1 = compose [showString prefix, s]
---   traceM (s1 "")
-
--- -- | A variant of 'traceTokAction' that uses 'boundless' depth and
--- -- 'nonVerboseData'.
--- traceTokActionD :: String -> Action
--- traceTokActionD = traceTokAction boundless nonVerboseData
-
--- -- | Action that traces the Var.
--- traceVarAction :: String -> Var -> Action
--- traceVarAction prefix v actx = do
---   c <- Net.valE actx v
---   traceM (prefix ++ show c)
+-- | Action that traces the value of a Var (prefixed).
+traceVarAction :: String -> Var -> Action
+traceVarAction prefix v = traceAction dumpVarVal
+  where
+    dumpVarVal actx = do
+      c <- valE v actx
+      return (prefix ++ show c)

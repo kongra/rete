@@ -12,6 +12,7 @@ module AI.Rete
     (
       -- * Abstraction
       Rete
+    , emptyRete
 
       -- * Adding Wmes
     , addWme

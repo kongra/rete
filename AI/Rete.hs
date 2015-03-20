@@ -45,6 +45,7 @@ module AI.Rete
     , acompose
     , passAction
     , traceAction
+    , traceMsgAction
     )
     where
 

@@ -10,8 +10,11 @@
 ------------------------------------------------------------------------
 module AI.Rete
     (
+      -- * Abstraction
+      Rete
+
       -- * Adding Wmes
-      addWme
+    , addWme
     , addWmeP
 
       -- * Adding productions
@@ -32,9 +35,11 @@ module AI.Rete
     , breadthFirst
     , depthFirst
 
-      -- * Forward chaining
+      -- * Forward chaining, evaluation
     , forwardChain
     , exec
+    , eval
+
 
       -- * Predefined actions and tools
     , acompose
@@ -46,3 +51,4 @@ module AI.Rete
 import AI.Rete.Data
 import AI.Rete.Flow
 import AI.Rete.Net
+import AI.Rete.State

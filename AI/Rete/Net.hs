@@ -410,7 +410,7 @@ forwardChain :: StepStrategy -> Agenda -> ReteState -> [(Agenda, ReteState)]
 forwardChain strategy agenda state =
   takeWhileI haveSomeWork (iterate (forwardStep strategy) (agenda, state))
   where
-    haveSomeWork (a, _) = not (null a)
+    haveSomeWork = not . null . fst
 
 -- | Returns the target state after forward chaining from the initial
 -- agenda and state.

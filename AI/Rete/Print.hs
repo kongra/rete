@@ -317,13 +317,13 @@ applySwitch switch c@Conf { opts = opts' } = c { opts = switch opts' }
 reteMImpl :: Impl (S.State ReteState) ShowS
 reteMImpl = str
 
--- WMES PRESENTATION
+-- Wmes VIS.
 
 instance Vnable Wme where
   toVnShow wme _ _ = return (shows wme)
   toVnAdjs _   _ _ = return []
 
--- TOKS PRESENTATION
+-- Toks VIS.
 
 instance Vnable Tok where
   toVnShow tok _ _ = return (showTok tok)
@@ -339,7 +339,7 @@ showTok tok =
     tokWmeS = rcompose (intersperse colon (map shows (reverse tok)))
     colon   = showString ","
 
--- AMEMS VISUALIZATION
+-- AMEMS VIS.
 
 instance Vnable Amem where
   toVnAdjs = amemAdjs
@@ -484,6 +484,12 @@ showJoinTest
                     , shows d,  showString ","
                     , shows f2
                     , showString "⟩"])
+
+-- RETE VIS.
+
+instance Vnable Rete where  -- Simply visualize dtn
+  toVnAdjs _ = toVnAdjs dtn
+  toVnShow _ = toVnShow dtn
 
 -- PRINT IMPLEMENTATION
 

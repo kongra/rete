@@ -19,6 +19,7 @@ module AI.Rete.State
 
       -- * Evaluation
     , run
+    , eval
     )
     where
 
@@ -43,6 +44,10 @@ overS f obj = viewS obj >>= setS obj . f
 -- | Runs the computation in the Rete state-monad.
 run :: ReteState -> ReteM a -> (a, ReteState)
 run = flip S.runState
+
+-- | Evaluates the Rete state-monad value.
+eval :: ReteState -> ReteM a -> a
+eval = flip S.evalState
 
 instance State Rete ReteState where
   viewS _ = S.get

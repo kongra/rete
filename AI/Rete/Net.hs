@@ -241,6 +241,10 @@ buildOrShareJoin parent amem tests = do
 
       -- Register join as its parent's child.
       setS parent (over bmemChildren (join:) parentState)
+
+      -- Add join to amem's successors.
+      overS (over amemSuccessors (join:)) amem
+
       return join
 
 -- CREATING CONDITIONS (USER SIDE)
@@ -292,9 +296,9 @@ instance Show VarVal where
   show (NoVarVal    v ) = "ERROR (3): NO VALUE FOR VAR " ++ show v  ++ "."
 
 -- | Returns a value of a variable inside an Action.
-val :: Var -> Actx -> ReteM VarVal
+val :: ToVar v => v -> Actx -> ReteM VarVal
 val v Actx { actxProd = prod, actxTok = tok } = do
-  v' <- v
+  v' <- var v
   case Map.lookup v' (prodBindings prod) of
     Nothing             -> return (NoVarVal v')
     Just (Location d f) -> return (ValidVarVal (fieldConstant f wme))
@@ -303,13 +307,13 @@ val v Actx { actxProd = prod, actxTok = tok } = do
 
 -- | Works like val, but raises an early error when a valid value
 -- can't be returned.
-valE :: Var -> Actx -> ReteM Constant
+valE :: ToVar v => v -> Actx -> ReteM Constant
 valE v actx = do
   result <- val v actx
   case result of { ValidVarVal c' -> return c'; _ -> error (show result) }
 
 -- | Works like valE, but returns Nothing instead of raising an error.
-valM :: Var -> Actx -> ReteM (Maybe Constant)
+valM :: ToVar v => v -> Actx -> ReteM (Maybe Constant)
 valM v actx = do
   result <- val v actx
   case result of { ValidVarVal c' -> return (Just c'); _ -> return Nothing }

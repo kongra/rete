@@ -21,6 +21,7 @@ module AI.Rete.Print
       -- * Print methods
       toShowS
     , toString
+    , execAndPrint
 
       -- * The 'Depth' constraints of the tree traversal process
     , Depth
@@ -48,7 +49,7 @@ module AI.Rete.Print
 
 import           AI.Rete.Data
 import           AI.Rete.Flow
-import           AI.Rete.Net (traceAction, valE)
+import           AI.Rete.Net (traceAction, valE, exec, breadthFirst)
 import           AI.Rete.State
 import           Control.Monad (liftM)
 import qualified Control.Monad.Trans.State.Strict as S
@@ -127,13 +128,15 @@ noFlags = Set.empty
 -- PREDEFINED Switch CONFIGURATIONS
 
 dataFlags :: [Flag]
-dataFlags =  [ AmemWmes
+dataFlags =  [ DataEmph
+             , AmemWmes
              , AmemWmesCount
              , BmemToks
              , BmemToksCount ]
 
 netFlags :: [Flag]
-netFlags =  [ AmemFields
+netFlags =  [ NetEmph
+            , AmemFields
             , AmemSuccessors
             , NodeChildren
             , JoinTests
@@ -503,6 +506,14 @@ toShowS d switch obj = printTree (switches conf) (toVn cleanVisited obj)
 toString :: Vnable a => Depth -> Switch -> a -> ReteM String
 toString d switch = liftM evalShowS . toShowS d switch
   where evalShowS s = s ""
+
+-- | Executes the passed agenda and prints its tree representation
+-- using switches.
+execAndPrint :: Switch -> Agenda -> IO ()
+execAndPrint switch agenda =
+  putStrLn (eval e (toString boundless switch Rete))
+  where
+    e = exec breadthFirst agenda emptyRete
 
 -- ACTIONS AND RELATED UTILS
 

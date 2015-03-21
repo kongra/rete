@@ -19,6 +19,7 @@ module AI.Rete.Flow
 
       -- * Variables
       , Var
+      , ToVar
       , var
 
       -- * Internals
@@ -279,6 +280,9 @@ instance ToConstant Constant where
   -- We may simply return the argument here, because Constants once
   -- interned never expire (get un-interned).
   toConstant = return
+
+instance ToConstant (ReteM Constant) where
+  toConstant = id
 
 instance ToConstant Primitive where
   -- Every Primitive is treated as a Const.

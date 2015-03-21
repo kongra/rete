@@ -379,7 +379,7 @@ data Amem =
   }
 
 instance Show Amem where
-  show amem = 'B' : show (amemId amem)
+  show amem = 'A' : show (amemId amem)
 
 instance Hashable Amem where
   hashWithSalt salt amem = salt `hashWithSalt` amemId amem
@@ -414,7 +414,9 @@ amemSuccessors f s = fmap (\v -> s { _amemSuccessors = v} ) (f (_amemSuccessors 
 newtype Bmem = Bmem Id deriving Eq
 
 instance Show Bmem where
-  show (Bmem i) = 'B' : show i
+  show bmem
+    | bmem == dtn = "DTN"
+    | otherwise   = 'B' : show i where (Bmem i) = bmem
 
 instance Hashable Bmem where
   hashWithSalt salt (Bmem i) = salt `hashWithSalt` i

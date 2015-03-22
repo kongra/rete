@@ -15,13 +15,13 @@ import AI.Rete.Print
 
 test1 :: IO ()
 test1 =
-  execAndPrint switch
+  execAndPrint (withNet . withData)
   [
     addWme "sójka" "jestPtak" True
 
   , addProd    [c      (var  "x"     ) "jestPtak"    True] []
     $ \actx -> [addWme (valE "x" actx) "jestZwierzę" True]
 
-  , addProd [c (var "x") "jestZwierzę" True] [] (traceTokAction "OK1: ")
+  , addProd   [c (var "x") "jestZwierzę" True] []
+    (traceTokAction "OK1: ")
   ]
-  where switch = withNet . withData

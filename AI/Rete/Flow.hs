@@ -84,9 +84,11 @@ internFields :: (ToConstant o, ToConstant a, ToConstant v)
              -> ReteM (Obj Constant, Attr Constant, Val Constant)
 internFields o a v =
   liftM3 (,,) (internField Obj o) (internField Attr a) (internField Val v)
+{-# INLINE internFields #-}
 
 internField :: ToConstant a => (Constant -> b) -> a -> ReteM b
 internField f s = liftM f (toConstant s)
+{-# INLINE internField #-}
 
 -- WMES INDEXES MANIPULATION
 
@@ -98,6 +100,7 @@ type WmesIndexOperator a =
 wmesIndexInsert ::  WmesIndexOperator a
 wmesIndexInsert k wme index = Map.insert k (Set.insert wme s) index
   where s  = Map.lookupDefault Set.empty k index
+{-# INLINE wmesIndexInsert #-}
 
 addToWorkingMemory :: Wme -> ReteM ()
 addToWorkingMemory wme@(Wme o a v) =
@@ -124,6 +127,7 @@ feedAmem :: Map.HashMap Wme Amem -> Wme -> Wme -> ReteM Agenda
 feedAmem amems wme k = case Map.lookup k amems of
   Just amem -> activateAmem amem wme
   Nothing   -> return []
+{-# INLINE feedAmem #-}
 
 feedAmems :: Wme -> Obj Constant -> Attr Constant -> Val Constant -> ReteM Agenda
 feedAmems wme o a v = do
@@ -157,6 +161,7 @@ leftActivateBmem bmem tok wme = do
 
 performJoinTests :: [JoinTest] -> Tok -> Wme -> Bool
 performJoinTests tests tok wme = all (passJoinTest tok wme) tests
+{-# INLINE performJoinTests #-}
 
 passJoinTest :: Tok -> Wme -> JoinTest -> Bool
 passJoinTest tok wme
@@ -169,6 +174,7 @@ fieldConstant :: Field -> Wme -> Constant
 fieldConstant O (Wme (Obj c)       _       _)  = c
 fieldConstant A (Wme _       (Attr c)      _)  = c
 fieldConstant V (Wme _             _  (Val c)) = c
+{-# INLINE fieldConstant #-}
 
 -- INDEXED JOIN
 
@@ -178,6 +184,7 @@ matchingAmemWmes tests tok amemState =  -- At least one test specified.
   toList (foldr Set.intersection s sets)
   where
     (s:sets) = map (amemWmesForTest tok amemState) tests
+{-# INLINE matchingAmemWmes #-}
 
 amemWmesForTest :: [Wme] -> AmemState -> JoinTest -> Set.HashSet Wme
 amemWmesForTest wmes amemState
@@ -192,6 +199,7 @@ amemWmesForTest wmes amemState
 
 amemWmesForIndex :: (Hashable a, Eq a) => a -> WmesIndex a -> Set.HashSet Wme
 amemWmesForIndex = Map.lookupDefault Set.empty
+{-# INLINE amemWmesForIndex #-}
 
 -- JOIN
 
@@ -229,6 +237,7 @@ leftActivateJoinChildren state tok wme = do
 noJoinChildren :: JoinState -> Bool
 noJoinChildren state =
   isNothing (view joinChildBmem state) && null (view joinChildProds state)
+{-# INLINE noJoinChildren #-}
 
 -- PROD
 
@@ -280,66 +289,86 @@ instance ToConstant Constant where
   -- We may simply return the argument here, because Constants once
   -- interned never expire (get un-interned).
   toConstant = return
+  {-# INLINE toConstant #-}
 
 instance ToConstant (ReteM Constant) where
   toConstant = id
+  {-# INLINE toConstant #-}
 
 instance ToConstant Primitive where
   -- Every Primitive is treated as a Const.
   toConstant = return . PrimitiveConstant
+  {-# INLINE toConstant #-}
 
 instance ToConstant Bool where
   toConstant = toConstant . BoolPrimitive
+  {-# INLINE toConstant #-}
 
 instance ToConstant Char where
   toConstant = toConstant . CharPrimitive
+  {-# INLINE toConstant #-}
 
 instance ToConstant Double where
   toConstant = toConstant . DoublePrimitive
+  {-# INLINE toConstant #-}
 
 instance ToConstant Float where
   toConstant = toConstant . FloatPrimitive
+  {-# INLINE toConstant #-}
 
 instance ToConstant Int where
   toConstant = toConstant . IntPrimitive
+  {-# INLINE toConstant #-}
 
 instance ToConstant Int8 where
   toConstant = toConstant . Int8Primitive
+  {-# INLINE toConstant #-}
 
 instance ToConstant Int16 where
   toConstant = toConstant . Int16Primitive
+  {-# INLINE toConstant #-}
 
 instance ToConstant Int32 where
   toConstant = toConstant . Int32Primitive
+  {-# INLINE toConstant #-}
 
 instance ToConstant Int64 where
   toConstant = toConstant . Int64Primitive
+  {-# INLINE toConstant #-}
 
 instance ToConstant Integer where
   toConstant = toConstant . IntegerPrimitive
+  {-# INLINE toConstant #-}
 
 instance ToConstant Word where
   toConstant = toConstant . WordPrimitive
+  {-# INLINE toConstant #-}
 
 instance ToConstant Word8 where
   toConstant = toConstant . Word8Primitive
+  {-# INLINE toConstant #-}
 
 instance ToConstant Word16 where
   toConstant = toConstant . Word16Primitive
+  {-# INLINE toConstant #-}
 
 instance ToConstant Word32 where
   toConstant = toConstant . Word32Primitive
+  {-# INLINE toConstant #-}
 
 instance ToConstant Word64  where
   toConstant = toConstant . Word64Primitive
+  {-# INLINE toConstant #-}
 
 instance ToConstant String where
   -- Raw String is always a constant.
   toConstant ""   = return emptyConstant
   toConstant name = internConstant name
+  {-# INLINE toConstant #-}
 
 instance ToConstant NamedPrimitive where
   toConstant = return . NamedPrimitiveConstant
+  {-# INLINE toConstant #-}
 
 -- EXPLICIT CONSTRUCTORS FOR VARIABLES
 
@@ -360,66 +389,86 @@ instance ToVar NamedPrimitive where
 
 instance ToVar Var where
   var = id
+  {-# INLINE var #-}
 
 class ToConstantOrVariable a where
   toConstantOrVariable :: a -> ReteM ConstantOrVariable
 
 instance ToConstantOrVariable Var where
   toConstantOrVariable = liftM JustVariable
+  {-# INLINE toConstantOrVariable #-}
 
 instance ToConstantOrVariable Primitive where
   -- Every Primitive is treated as a Const.
   toConstantOrVariable = return . JustConstant . PrimitiveConstant
+  {-# INLINE toConstantOrVariable #-}
 
 instance ToConstantOrVariable Bool where
   toConstantOrVariable = toConstantOrVariable . BoolPrimitive
+  {-# INLINE toConstantOrVariable #-}
 
 instance ToConstantOrVariable Char where
   toConstantOrVariable = toConstantOrVariable . CharPrimitive
+  {-# INLINE toConstantOrVariable #-}
 
 instance ToConstantOrVariable Double where
   toConstantOrVariable = toConstantOrVariable . DoublePrimitive
+  {-# INLINE toConstantOrVariable #-}
 
 instance ToConstantOrVariable Float where
   toConstantOrVariable = toConstantOrVariable . FloatPrimitive
+  {-# INLINE toConstantOrVariable #-}
 
 instance ToConstantOrVariable Int where
   toConstantOrVariable = toConstantOrVariable . IntPrimitive
+  {-# INLINE toConstantOrVariable #-}
 
 instance ToConstantOrVariable Int8 where
   toConstantOrVariable = toConstantOrVariable . Int8Primitive
+  {-# INLINE toConstantOrVariable #-}
 
 instance ToConstantOrVariable Int16 where
   toConstantOrVariable = toConstantOrVariable . Int16Primitive
+  {-# INLINE toConstantOrVariable #-}
 
 instance ToConstantOrVariable Int32 where
   toConstantOrVariable = toConstantOrVariable . Int32Primitive
+  {-# INLINE toConstantOrVariable #-}
 
 instance ToConstantOrVariable Int64 where
   toConstantOrVariable = toConstantOrVariable . Int64Primitive
+  {-# INLINE toConstantOrVariable #-}
 
 instance ToConstantOrVariable Integer where
   toConstantOrVariable = toConstantOrVariable . IntegerPrimitive
+  {-# INLINE toConstantOrVariable #-}
 
 instance ToConstantOrVariable Word where
   toConstantOrVariable = toConstantOrVariable . WordPrimitive
+  {-# INLINE toConstantOrVariable #-}
 
 instance ToConstantOrVariable Word8 where
   toConstantOrVariable = toConstantOrVariable . Word8Primitive
+  {-# INLINE toConstantOrVariable #-}
 
 instance ToConstantOrVariable Word16 where
   toConstantOrVariable = toConstantOrVariable . Word16Primitive
+  {-# INLINE toConstantOrVariable #-}
 
 instance ToConstantOrVariable Word32 where
   toConstantOrVariable = toConstantOrVariable . Word32Primitive
+  {-# INLINE toConstantOrVariable #-}
 
 instance ToConstantOrVariable Word64  where
   toConstantOrVariable = toConstantOrVariable . Word64Primitive
+  {-# INLINE toConstantOrVariable #-}
 
 instance ToConstantOrVariable String where
   -- Raw String is always a constant.
   toConstantOrVariable "" = return (JustConstant emptyConstant)
   toConstantOrVariable s  = liftM JustConstant (internConstant s)
+  {-# INLINE toConstantOrVariable #-}
 
 instance ToConstantOrVariable NamedPrimitive where
   toConstantOrVariable = return . JustConstant . NamedPrimitiveConstant
+  {-# INLINE toConstantOrVariable #-}

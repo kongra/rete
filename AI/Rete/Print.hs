@@ -95,9 +95,11 @@ flagCode JoinTests      = 10
 flagCode JoinAmems      = 11
 flagCode Bindings       = 12
 flagCode PredsCount     = 13
+{-# INLINE flagCode #-}
 
 instance Hashable Flag where
   hashWithSalt salt flag = salt `hashWithSalt` flagCode flag
+  {-# INLINE hashWithSalt #-}
 
 -- | A set of 'Flags's.
 type Flags = Set.HashSet Flag

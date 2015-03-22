@@ -153,6 +153,7 @@ instance Hashable Primitive where
   hashWithSalt salt (Word16Primitive  v) = salt `hashWithSalt` v
   hashWithSalt salt (Word32Primitive  v) = salt `hashWithSalt` v
   hashWithSalt salt (Word64Primitive  v) = salt `hashWithSalt` v
+  {-# INLINE hashWithSalt #-}
 
 -- | Primitive that carries on its textual representation.
 data NamedPrimitive =
@@ -165,6 +166,7 @@ data NamedPrimitive =
 instance Eq NamedPrimitive where
   NamedPrimitive { namedPrimitive = p1 } ==
     NamedPrimitive { namedPrimitive = p2 } = p1 == p2
+  {-# INLINE (==) #-}
 
 instance Show NamedPrimitive where
   show NamedPrimitive { namePrimitiveName = name } = name
@@ -172,6 +174,7 @@ instance Show NamedPrimitive where
 instance Hashable NamedPrimitive where
   hashWithSalt salt NamedPrimitive { namedPrimitive = p } =
     salt `hashWithSalt` p
+  {-# INLINE hashWithSalt #-}
 
 -- | Constant (non-variable).
 data Constant = StringConstant         !String !Id
@@ -188,11 +191,13 @@ instance Eq Constant where
   (PrimitiveConstant      p1 ) == (PrimitiveConstant      p2 ) = p1  == p2
   (NamedPrimitiveConstant np1) == (NamedPrimitiveConstant np2) = np1 == np2
   _ == _ = False
+  {-# INLINE (==) #-}
 
 instance Hashable Constant where
   hashWithSalt salt (StringConstant       _ i ) = salt `hashWithSalt` i
   hashWithSalt salt (PrimitiveConstant      p ) = salt `hashWithSalt` p
   hashWithSalt salt (NamedPrimitiveConstant np) = salt `hashWithSalt` np
+  {-# INLINE hashWithSalt #-}
 
 -- | Variable.
 data Variable = StringVariable         !String !Id
@@ -206,10 +211,12 @@ instance Eq Variable where
   (StringVariable       _ i1 ) == (StringVariable       _ i2 ) = i1  == i2
   (NamedPrimitiveVariable np1) == (NamedPrimitiveVariable np2) = np1 == np2
   _ == _ = False
+  {-# INLINE (==) #-}
 
 instance Hashable Variable where
   hashWithSalt salt (StringVariable       _ i ) = salt `hashWithSalt` i
   hashWithSalt salt (NamedPrimitiveVariable np) = salt `hashWithSalt` np
+  {-# INLINE hashWithSalt #-}
 
 -- SPECIAL SYMBOLS
 
@@ -229,6 +236,7 @@ instance Show a => Show (Obj a) where
 
 instance Hashable a => Hashable (Obj a) where
   hashWithSalt salt (Obj s) = salt `hashWithSalt` s
+  {-# INLINE hashWithSalt #-}
 
 -- | Attribute.
 newtype Attr a = Attr a deriving Eq
@@ -238,6 +246,7 @@ instance Show a => Show (Attr a) where
 
 instance Hashable a => Hashable (Attr a) where
   hashWithSalt salt (Attr s) = salt `hashWithSalt` s
+  {-# INLINE hashWithSalt #-}
 
 -- | Value.
 newtype Val a = Val a deriving Eq
@@ -247,6 +256,7 @@ instance Show a => Show (Val a) where
 
 instance Hashable a => Hashable (Val a) where
   hashWithSalt salt (Val s) = salt `hashWithSalt` s
+  {-# INLINE hashWithSalt #-}
 
 -- | Field is a description of a location in Wmes, Conds etc. Its
 -- variants correspond with Obj, Attr and Val.
@@ -257,6 +267,7 @@ instance Hashable Field where
     O -> 1 :: Int
     A -> 2 :: Int
     V -> 3 :: Int
+  {-# INLINE hashWithSalt #-}
 
 -- WMES
 
@@ -269,6 +280,7 @@ instance Show Wme where
 instance Hashable Wme where
   hashWithSalt salt (Wme o a v) =
     salt `hashWithSalt` o `hashWithSalt` a `hashWithSalt` v
+  {-# INLINE hashWithSalt #-}
 
 type WmesIndex a = Map.HashMap a (Set.HashSet Wme     )
 type WmesByObj   = WmesIndex     (Obj         Constant)
@@ -383,9 +395,11 @@ instance Show Amem where
 
 instance Hashable Amem where
   hashWithSalt salt amem = salt `hashWithSalt` amemId amem
+  {-# INLINE hashWithSalt #-}
 
 instance Eq Amem where
   Amem { amemId = i1 } == Amem { amemId = i2 } = i1 == i2
+  {-# INLINE (==) #-}
 
 data AmemState =
   AmemState
@@ -420,6 +434,7 @@ instance Show Bmem where
 
 instance Hashable Bmem where
   hashWithSalt salt (Bmem i) = salt `hashWithSalt` i
+  {-# INLINE hashWithSalt #-}
 
 data BmemState =
   BmemState
@@ -458,9 +473,11 @@ instance Show Join where
 
 instance Hashable Join where
   hashWithSalt salt join = salt `hashWithSalt` joinId join
+  {-# INLINE hashWithSalt #-}
 
 instance Eq Join where
   join1 == join2 = joinId join1 == joinId join2
+  {-# INLINE (==) #-}
 
 -- | Join node.
 data JoinState =
@@ -487,9 +504,11 @@ instance Show Prod where
 
 instance Hashable Prod where
   hashWithSalt salt prod = salt `hashWithSalt` prodId prod
+  {-# INLINE hashWithSalt #-}
 
 instance Eq Prod where
   prod1 == prod2 = prodId prod1 == prodId prod2
+  {-# INLINE (==) #-}
 
 -- | A predicate on Toks.
 type Pred = Actx -> Bool
@@ -533,6 +552,7 @@ instance Show ConstantOrVariable where
 instance Hashable ConstantOrVariable where
   hashWithSalt salt (JustConstant c) = salt `hashWithSalt` c
   hashWithSalt salt (JustVariable v) = salt `hashWithSalt` v
+  {-# INLINE hashWithSalt #-}
 
 -- | Positive Condition.
 data Cond = Cond !(Obj  ConstantOrVariable)

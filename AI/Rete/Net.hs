@@ -180,6 +180,8 @@ type IndexedCond = (Int, Cond)
 
 indexedConds :: [Cond] -> [IndexedCond]
 indexedConds = zip [0 ..]
+{-# INLINE indexedConds #-}
+
 
 fieldEqualTo :: Cond -> ConstantOrVariable -> Maybe Field
 fieldEqualTo (Cond (Obj o) (Attr a) (Val v)) s
@@ -187,11 +189,13 @@ fieldEqualTo (Cond (Obj o) (Attr a) (Val v)) s
   | a == s    = Just A
   | v == s    = Just V
   | otherwise = Nothing
+{-# INLINE fieldEqualTo #-}
 
 matchingLocation :: ConstantOrVariable -> IndexedCond -> Maybe Location
 matchingLocation s (i, cond) = case fieldEqualTo cond s of
   Nothing -> Nothing
   Just f  -> Just (Location i f)
+{-# INLINE matchingLocation #-}
 
 joinTestForField :: Int -> ConstantOrVariable -> Field -> [IndexedCond]
                  -> Maybe JoinTest
@@ -223,6 +227,7 @@ joinTestsForCondImpl i (Obj o) (Attr a) (Val v) earlierConds =
 
 joinTestsForCond :: IndexedCond -> [IndexedCond] -> [JoinTest]
 joinTestsForCond (i, Cond o a v) = joinTestsForCondImpl i o a v
+{-# INLINE joinTestsForCond #-}
 
 -- JOIN CREATION
 
@@ -256,6 +261,7 @@ data C = C !(ReteM (Obj  ConstantOrVariable))
 
 toField :: ToConstantOrVariable a => (ConstantOrVariable -> b) -> a -> ReteM b
 toField f = liftM f . toConstantOrVariable
+{-# INLINE toField #-}
 
 -- | Creates a positive condition.
 c :: (ToConstantOrVariable o, ToConstantOrVariable a, ToConstantOrVariable v)
@@ -264,6 +270,7 @@ c o a v = C (toField Obj o) (toField Attr a) (toField Val v)
 
 toCond :: C -> ReteM Cond
 toCond (C o a v) = liftM3 Cond o a v
+{-# INLINE toCond #-}
 
 -- CONFIGURING AND ACCESSING VARIABLE BINDINGS (IN ACTIONS)
 

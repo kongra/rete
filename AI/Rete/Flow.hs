@@ -394,6 +394,10 @@ instance ToVar Var where
 class ToConstantOrVariable a where
   toConstantOrVariable :: a -> ReteM ConstantOrVariable
 
+instance ToConstantOrVariable ConstantOrVariable where
+  toConstantOrVariable = return . id
+  {-# INLINE toConstantOrVariable #-}
+
 instance ToConstantOrVariable Var where
   toConstantOrVariable = liftM JustVariable
   {-# INLINE toConstantOrVariable #-}

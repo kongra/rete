@@ -204,8 +204,8 @@ data Variable = StringVariable         !String !Id
               | NamedPrimitiveVariable !NamedPrimitive
 
 instance Show Variable where
-  show (StringVariable         s _)  = s
-  show (NamedPrimitiveVariable np ) = show np
+  show (StringVariable         s _) = "var " ++ s
+  show (NamedPrimitiveVariable np ) = "var " ++ show np
 
 instance Eq Variable where
   (StringVariable       _ i1 ) == (StringVariable       _ i2 ) = i1  == i2

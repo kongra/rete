@@ -341,7 +341,7 @@ showTok tok =
           , tokWmeS
           , showString "}"] where
 
-    tokWmeS = rcompose (intersperse colon (map shows (reverse tok)))
+    tokWmeS = rcompose (intersperse colon (map shows tok))
     colon   = showString ","
 
 -- AMEMS VIS.

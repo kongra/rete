@@ -13,6 +13,8 @@ module AI.Rete.Test where
 import AI.Rete
 import AI.Rete.Data
 import AI.Rete.Print
+import Control.Monad (forM_)
+import Data.List (permutations)
 
 mkConstant :: String -> Int -> ConstantOrVariable
 mkConstant s i = JustConstant
@@ -63,14 +65,17 @@ test3Prod t = do
       agenda = [ addWme (justConst s1) (justConst s2) (justConst s3)
                , addWme (justConst s4) (justConst s5) (justConst s6)
                , addWme (justConst s7) (justConst s8) (justConst s9)
+               , addWme (justConst s7) (justConst s8) "aaa"
 
                , addProd [ c s1 s2 s3
                          , c s4 s5 s6
                          , c s7 s8 s9 ] [] (traceTokAction "tok: ") ]
 
   putStrLn (show t)
-  let finalState = exec breadthFirst agenda emptyRete
-  seq finalState (return ())
+  forM_ (permutations agenda) $ \a -> do
+    let finalState = exec breadthFirst a emptyRete
+    seq finalState (return ())
+
   return ()
 
 test3 :: IO ()

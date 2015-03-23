@@ -511,7 +511,7 @@ instance Eq Prod where
   {-# INLINE (==) #-}
 
 -- | A predicate on Toks.
-type Pred = Actx -> Bool
+type Pred = Actx -> ReteM Bool
 
 -- | Symbol location describes the binding for a variable within a token.
 data Location = Location !Int !Field

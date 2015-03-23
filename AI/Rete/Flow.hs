@@ -247,8 +247,10 @@ leftActivateProd tok wme prod@Prod { prodPreds    = preds
   let newTok     = wme:tok
       actx       = Actx prod newTok
       matching p = p actx
+      true       = id
 
-  if all matching preds
+  evaluatedPreds <- mapM matching preds
+  if all true evaluatedPreds
     then return (map withThisProd (action actx))
     else return []
 

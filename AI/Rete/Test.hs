@@ -73,23 +73,34 @@ test3Prod t = do
 
   putStrLn (show t)
   forM_ (permutations agenda) $ \a -> do
-    let finalState = exec breadthFirst a emptyRete
-    seq finalState (return ())
+    _ <- execIO breadthFirst a emptyRete
+    return ()
 
   return ()
 
 test3 :: IO ()
-test3 = mapM_ test3Prod p3Constants
+test3 = mapM_ test3Prod (take 2 p3Constants)
 
--- test1 :: IO ()
--- test1 =
---   execAndPrint (withNet . withData)
---   [
---     addWme "sójka" "jestPtak" True
+test4 :: IO ()
+test4 = do
+  let agenda =
+        [
+          addProd [ c (var "p") "jest ptakiem" True
+                  , c (var "p") "ma kolor"     "szary"] []
+          passAction
+          -- $
+          -- traceAction $ \actx -> do
+          --   p <- valE "p" actx
+          --   return ("oto wróbel " ++ show p)
 
---   , addProd    [c      (var  "x"     ) "jestPtak"    True] []
---     $ \actx -> [addWme (valE "x" actx) "jestZwierzę" True]
+        , addWme "ptica"  "jest ptakiem" True
+        , addWme "ptica"  "ma kolor"     "szary"
+        , addWme "kotica" "ma kolor"     "szary"
+        ]
 
---   , addProd   [c (var "x") "jestZwierzę" True] []
---     (traceTokAction "OK1: ")
---   ]
+  _ <- execIO breadthFirst agenda emptyRete
+  return ()
+  -- forM_ (permutations agenda) $ \a ->
+  --   execIO breadthFirst a emptyRete
+
+  -- putStrLn "Done"

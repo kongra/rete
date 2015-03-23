@@ -39,8 +39,8 @@ module AI.Rete
       -- * Forward chaining, evaluation
     , forwardChain
     , exec
+    , execIO
     , eval
-
 
       -- * Predefined actions and tools
     , acompose

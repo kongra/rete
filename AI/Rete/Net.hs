@@ -30,6 +30,7 @@ module AI.Rete.Net
       -- * Forward chaining
     , forwardChain
     , exec
+    , execIO
 
       -- * Predefined actions and tools
     , acompose
@@ -427,6 +428,13 @@ forwardChain strategy agenda state =
 -- agenda and state.
 exec :: StepStrategy -> Agenda -> ReteState -> ReteState
 exec strategy agenda = snd . last . forwardChain strategy agenda
+
+-- | Works like exec but seqs the result before returning it in IO
+-- monad.
+execIO :: StepStrategy -> Agenda -> ReteState -> IO ReteState
+execIO strategy agenda state = do
+  let targetState = exec strategy agenda state
+  seq targetState (return targetState)
 
 -- SOME PREDEFINED ACTIONS AND RELATED UTILITIES
 

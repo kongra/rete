@@ -22,6 +22,7 @@ module AI.Rete.Print
       toShowS
     , toString
     , execAndPrint
+    , stateToString
 
       -- * The 'Depth' constraints of the tree traversal process
     , Depth
@@ -516,6 +517,10 @@ execAndPrint switch agenda =
   putStrLn (eval e (toString boundless switch Rete))
   where
     e = exec breadthFirst agenda emptyRete
+
+-- | Returns a string representing the state in a tree representation.
+stateToString :: Switch -> ReteState -> String
+stateToString switch state = eval state $ toString boundless switch Rete
 
 -- ACTIONS AND RELATED UTILS
 

@@ -510,12 +510,11 @@ toString :: Vnable a => Depth -> Switch -> a -> ReteM String
 toString d switch = liftM evalShowS . toShowS d switch
   where evalShowS s = s ""
 
--- | Returns a string representing the state in a tree representation.
+-- | Returns a string representing the state as a tree.
 stateToString :: Switch -> ReteState -> String
 stateToString switch state = eval state $ toString boundless switch Rete
 
--- | Executes the passed agenda and prints its tree representation
--- using switches.
+-- | Executes the passed agenda and prints its tree representation.
 execAndPrint :: Switch -> Agenda -> IO ()
 execAndPrint switch agenda =
   putStrLn (stateToString switch (exec breadthFirst agenda emptyRete))

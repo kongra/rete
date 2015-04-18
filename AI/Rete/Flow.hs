@@ -2,6 +2,7 @@
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances    #-}
 {-# LANGUAGE RankNTypes           #-}
+{-# LANGUAGE OverloadedStrings    #-}
 ------------------------------------------------------------------------
 -- |
 -- Module      : AI.Rete.Flow
@@ -40,6 +41,7 @@ import qualified Data.HashSet as Set
 import           Data.Hashable (Hashable)
 import           Data.Int
 import           Data.Maybe (isNothing)
+import qualified Data.Text as T
 import           Data.Word
 import           Kask.Control.Lens (view, set, over)
 import           Kask.Data.List (nthDef)
@@ -57,25 +59,25 @@ genid = do
 
 -- INTERNING CONSTANTS AND VARIABLES
 
-internConstant :: String -> ReteM Constant
+internConstant :: T.Text -> ReteM Constant
 internConstant s = do
   cs <- liftM (view reteConstants) (viewS Rete)
   case Map.lookup s cs of
     Just c  -> return c
     Nothing -> do
       i    <- genid
-      let c = StringConstant s i
+      let c = TextConstant s i
       overS (over reteConstants (Map.insert s c)) Rete
       return c
 
-internVariable :: String -> ReteM Variable
+internVariable :: T.Text -> ReteM Variable
 internVariable s = do
   vs <- liftM (view reteVariables) (viewS Rete)
   case Map.lookup s vs of
     Just v  -> return v
     Nothing -> do
       i    <- genid
-      let v = StringVariable s i
+      let v = TextVariable s i
       overS (over reteVariables (Map.insert s v)) Rete
       return v
 
@@ -362,10 +364,15 @@ instance ToConstant Word64  where
   toConstant = toConstant . Word64Primitive
   {-# INLINE toConstant #-}
 
-instance ToConstant String where
+instance ToConstant T.Text where
   -- Raw String is always a constant.
-  toConstant ""   = return emptyConstant
-  toConstant name = internConstant name
+  toConstant name
+    | T.null name = return emptyConstant
+    | otherwise   = internConstant name
+  {-# INLINE toConstant #-}
+
+instance ToConstant String where
+  toConstant = toConstant . T.pack
   {-# INLINE toConstant #-}
 
 instance ToConstant NamedPrimitive where
@@ -381,13 +388,17 @@ class ToVar a where
   -- | Marks a thing as a variable resulting in a Symbolic value.
   var :: a -> Var
 
-instance ToVar String where
-  var "" = error "ERROR (1): EMPTY VARIABLE NAME."
-  var s  = internVariable s
+instance ToVar T.Text where
+  var s
+    | T.null s  = error "ERROR (1): EMPTY VARIABLE NAME."
+    | otherwise = internVariable s
+
+instance ToVar String where var = var . T.pack
 
 instance ToVar NamedPrimitive where
-  var (NamedPrimitive _ "") = error "ERROR (2): EMPTY VARIABLE NAME."
-  var np                    = return (NamedPrimitiveVariable np)
+  var np@(NamedPrimitive _ name)
+    | T.null name = error "ERROR (2): EMPTY VARIABLE NAME."
+    | otherwise   = return (NamedPrimitiveVariable np)
 
 instance ToVar Var where
   var = id
@@ -469,10 +480,15 @@ instance ToConstantOrVariable Word64  where
   toConstantOrVariable = toConstantOrVariable . Word64Primitive
   {-# INLINE toConstantOrVariable #-}
 
-instance ToConstantOrVariable String where
+instance ToConstantOrVariable T.Text where
   -- Raw String is always a constant.
-  toConstantOrVariable "" = return (JustConstant emptyConstant)
-  toConstantOrVariable s  = liftM JustConstant (internConstant s)
+  toConstantOrVariable s
+    | T.null s  = return (JustConstant emptyConstant)
+    | otherwise = liftM JustConstant (internConstant s)
+  {-# INLINE toConstantOrVariable #-}
+
+instance ToConstantOrVariable String where
+  toConstantOrVariable = toConstantOrVariable . T.pack
   {-# INLINE toConstantOrVariable #-}
 
 instance ToConstantOrVariable NamedPrimitive where

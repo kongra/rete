@@ -1,4 +1,5 @@
-{-# LANGUAGE Trustworthy #-}
+{-# LANGUAGE Trustworthy       #-}
+{-# LANGUAGE OverloadedStrings #-}
 ------------------------------------------------------------------------
 -- |
 -- Module      : AI.Rete.Data
@@ -86,11 +87,12 @@ module AI.Rete.Data
     )
     where
 
-import qualified Control.Monad.Trans.State.Strict as S
-import qualified Data.HashMap.Strict as Map
-import qualified Data.HashSet as Set
+import qualified Control.Monad.Trans.State.Strict  as S
+import qualified Data.HashMap.Strict               as Map
+import qualified Data.HashSet                      as Set
 import           Data.Hashable (Hashable, hashWithSalt)
 import           Data.Int
+import qualified Data.Text                         as T
 import           Data.Word
 import           Kask.Control.Lens (Lens, view)
 
@@ -160,7 +162,7 @@ data NamedPrimitive =
   NamedPrimitive
   {
     namedPrimitive    :: !Primitive
-  , namePrimitiveName :: !String
+  , namePrimitiveName :: !T.Text
   }
 
 instance Eq NamedPrimitive where
@@ -169,7 +171,7 @@ instance Eq NamedPrimitive where
   {-# INLINE (==) #-}
 
 instance Show NamedPrimitive where
-  show NamedPrimitive { namePrimitiveName = name } = name
+  show NamedPrimitive { namePrimitiveName = name } = show name
 
 instance Hashable NamedPrimitive where
   hashWithSalt salt NamedPrimitive { namedPrimitive = p } =
@@ -177,54 +179,54 @@ instance Hashable NamedPrimitive where
   {-# INLINE hashWithSalt #-}
 
 -- | Constant (non-variable).
-data Constant = StringConstant         !String !Id
+data Constant = TextConstant           !T.Text !Id
               | PrimitiveConstant      !Primitive
               | NamedPrimitiveConstant !NamedPrimitive
 
 instance Show Constant where
-  show (StringConstant         s _) = s
+  show (TextConstant           s _) = show s
   show (PrimitiveConstant      p  ) = show p
   show (NamedPrimitiveConstant np ) = show np
 
 instance Eq Constant where
-  (StringConstant       _ i1 ) == (StringConstant       _ i2 ) = i1  == i2
+  (TextConstant         _ i1 ) == (TextConstant         _ i2 ) = i1  == i2
   (PrimitiveConstant      p1 ) == (PrimitiveConstant      p2 ) = p1  == p2
   (NamedPrimitiveConstant np1) == (NamedPrimitiveConstant np2) = np1 == np2
   _ == _ = False
   {-# INLINE (==) #-}
 
 instance Hashable Constant where
-  hashWithSalt salt (StringConstant       _ i ) = salt `hashWithSalt` i
+  hashWithSalt salt (TextConstant         _ i ) = salt `hashWithSalt` i
   hashWithSalt salt (PrimitiveConstant      p ) = salt `hashWithSalt` p
   hashWithSalt salt (NamedPrimitiveConstant np) = salt `hashWithSalt` np
   {-# INLINE hashWithSalt #-}
 
 -- | Variable.
-data Variable = StringVariable         !String !Id
+data Variable = TextVariable           !T.Text !Id
               | NamedPrimitiveVariable !NamedPrimitive
 
 instance Show Variable where
-  show (StringVariable         s _) = "var " ++ s
+  show (TextVariable           s _) = "var " ++ show s
   show (NamedPrimitiveVariable np ) = "var " ++ show np
 
 instance Eq Variable where
-  (StringVariable       _ i1 ) == (StringVariable       _ i2 ) = i1  == i2
+  (TextVariable         _ i1 ) == (TextVariable         _ i2 ) = i1  == i2
   (NamedPrimitiveVariable np1) == (NamedPrimitiveVariable np2) = np1 == np2
   _ == _ = False
   {-# INLINE (==) #-}
 
 instance Hashable Variable where
-  hashWithSalt salt (StringVariable       _ i ) = salt `hashWithSalt` i
+  hashWithSalt salt (TextVariable         _ i ) = salt `hashWithSalt` i
   hashWithSalt salt (NamedPrimitiveVariable np) = salt `hashWithSalt` np
   {-# INLINE hashWithSalt #-}
 
 -- SPECIAL SYMBOLS
 
 emptyConstant :: Constant
-emptyConstant =  StringConstant "" (-1)
+emptyConstant =  TextConstant "" (-1)
 
 wildcardConstant :: Constant
-wildcardConstant = StringConstant "*" (-3)
+wildcardConstant = TextConstant "*" (-3)
 
 -- FIELDS AND THEIR VALUES
 
@@ -310,8 +312,8 @@ data ReteState =
   { _reteId            :: !Id
 
     -- Interned symbols.
-  , _reteConstants     :: !(Map.HashMap String Constant)
-  , _reteVariables     :: !(Map.HashMap String Variable)
+  , _reteConstants     :: !(Map.HashMap T.Text Constant)
+  , _reteVariables     :: !(Map.HashMap T.Text Variable)
 
     -- WorkingMemory.
   , _reteWmes          :: !(Set.HashSet Wme)
@@ -329,10 +331,10 @@ data ReteState =
 reteId :: Lens ReteState Id
 reteId f s = fmap (\v -> s { _reteId = v} ) (f (_reteId s))
 
-reteConstants :: Lens ReteState (Map.HashMap String Constant)
+reteConstants :: Lens ReteState (Map.HashMap T.Text Constant)
 reteConstants f s = fmap (\v -> s { _reteConstants = v} ) (f (_reteConstants s))
 
-reteVariables :: Lens ReteState (Map.HashMap String Variable)
+reteVariables :: Lens ReteState (Map.HashMap T.Text Variable)
 reteVariables f s = fmap (\v -> s { _reteVariables = v} ) (f (_reteVariables s))
 
 reteWmes :: Lens ReteState (Set.HashSet Wme)

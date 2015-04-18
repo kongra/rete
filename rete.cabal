@@ -31,6 +31,7 @@ library
                    , transformers
                    , unordered-containers >= 0.2.5.0
                    , hashable >= 1.2.2.0
+                   , text >= 1.2.0.4
                    , safe >= 0.3.8
                    , kask-base >= 0.1.0
                    , treeprint >= 0.1.0

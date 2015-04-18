@@ -301,7 +301,7 @@ data VarVal = ValidVarVal   !Constant
 
 instance Show VarVal where
   show (ValidVarVal s ) = show s
-  show (NoVarVal    v ) = "ERROR (3): NO VALUE FOR VAR " ++ show v  ++ "."
+  show (NoVarVal    v ) = "rete ERROR (3): NO VALUE FOR VAR " ++ show v
 
 -- | Returns a value of a variable inside an Action.
 val :: ToVar v => v -> Actx -> ReteM VarVal
@@ -311,7 +311,7 @@ val v Actx { actxProd = prod, actxTok = tok } = do
     Nothing             -> return (NoVarVal v')
     Just (Location d f) -> return (ValidVarVal (fieldConstant f wme))
       where
-        wme = nthDef (error ("PANIC (5): ILLEGAL INDEX " ++ show d)) d tok
+        wme = nthDef (error ("rete PANIC (5): ILLEGAL INDEX " ++ show d)) d tok
 
 -- | Works like val, but raises an early error when a valid value
 -- can't be returned.
@@ -342,7 +342,7 @@ addProdP conds preds action priority =
 addProdA :: [C] -> [Pred] -> Action -> ReteM Agenda
 addProdA cs preds action = do
   when (null cs)
-    (error "ERROR (4): PRODUCTION MUST HAVE AT LEAST 1 CONDITION (0 GIVEN).")
+    (error "rete ERROR (4): PRODUCTION MUST HAVE AT LEAST 1 COND (0 GIVEN)")
 
   conds <- mapM toCond cs
 

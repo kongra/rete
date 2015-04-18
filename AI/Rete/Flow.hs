@@ -51,7 +51,7 @@ genid :: ReteM Id
 genid = do
   state <- viewS Rete
   let recent = view reteId state
-  when (recent == maxBound) (error "PANIC (2): Id OVERFLOW.")
+  when (recent == maxBound) (error "rete PANIC (2): Id OVERFLOW")
 
   let new = recent + 1
   setS Rete (set reteId new state)
@@ -170,7 +170,7 @@ passJoinTest tok wme
   JoinTest { joinField1 = f1, joinField2 = f2, joinDistance = d } =
     fieldConstant f1 wme == fieldConstant f2 wme2
     where
-      wme2  = nthDef (error ("PANIC (3): ILLEGAL INDEX " ++ show d)) d tok
+      wme2  = nthDef (error ("rete PANIC (3): ILLEGAL INDEX " ++ show d)) d tok
 
 fieldConstant :: Field -> Wme -> Constant
 fieldConstant O (Wme (Obj c)       _       _)  = c
@@ -196,7 +196,7 @@ amemWmesForTest wmes amemState
       A -> amemWmesForIndex (Attr c) (view amemWmesByAttr amemState)
       V -> amemWmesForIndex (Val  c) (view amemWmesByVal  amemState)
     where
-      wme = nthDef (error ("PANIC (4): ILLEGAL INDEX " ++ show d)) d wmes
+      wme = nthDef (error ("rete PANIC (4): ILLEGAL INDEX " ++ show d)) d wmes
       c   = fieldConstant f2 wme
 
 amemWmesForIndex :: (Hashable a, Eq a) => a -> WmesIndex a -> Set.HashSet Wme
@@ -390,14 +390,14 @@ class ToVar a where
 
 instance ToVar T.Text where
   var s
-    | T.null s  = error "ERROR (1): EMPTY VARIABLE NAME."
+    | T.null s  = error "rete ERROR (1): EMPTY VARIABLE NAME"
     | otherwise = internVariable s
 
 instance ToVar String where var = var . T.pack
 
 instance ToVar NamedPrimitive where
   var np@(NamedPrimitive _ name)
-    | T.null name = error "ERROR (2): EMPTY VARIABLE NAME."
+    | T.null name = error "rete ERROR (2): EMPTY VARIABLE NAME"
     | otherwise   = return (NamedPrimitiveVariable np)
 
 instance ToVar Var where

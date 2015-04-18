@@ -78,5 +78,5 @@ instance State Join JoinState where
 
 lookupState :: (Hashable k, Eq k, Show k) => k -> Map.HashMap k v -> v
 lookupState k = Map.lookupDefault
-                (error ("PANIC (1): STATE NOT FOUND FOR " ++ show k)) k
+                (error ("rete PANIC (1): STATE NOT FOUND FOR " ++ show k)) k
 {-# INLINE lookupState #-}

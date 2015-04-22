@@ -1,4 +1,4 @@
-{-# LANGUAGE Trustworthy          #-}
+{-# LANGUAGE Trustworthy #-}
 ------------------------------------------------------------------------
 -- |
 -- Module      : AI.Rete.Net

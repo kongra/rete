@@ -1,8 +1,8 @@
+{-# LANGUAGE Trustworthy           #-}
 {-# LANGUAGE RankNTypes            #-}
 {-# LANGUAGE TypeSynonymInstances  #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE Trustworthy           #-}
 ------------------------------------------------------------------------
 -- |
 -- Module      : AI.Rete.Print
@@ -54,7 +54,6 @@ import           AI.Rete.Net (traceAction, valE, exec, breadthFirst)
 import           AI.Rete.State
 import           Control.Monad (liftM)
 import qualified Control.Monad.Trans.State.Strict as S
-import           Data.Foldable (Foldable)
 import qualified Data.HashMap.Strict as Map
 import qualified Data.HashSet as Set
 import           Data.Hashable (Hashable, hashWithSalt)
@@ -259,8 +258,8 @@ toVnsM vs = liftM (map (toVn vs)) . toListM
 toVnShowsM :: (Monad m, Foldable f, Vnable a) => m (f a) -> m [VnShow]
 toVnShowsM = liftM (map toVnShow) . toListM
 
-type OptLabelVn = (Monad m, Foldable f, Vnable a)
-               => Bool -> String -> Visited -> m (f a) -> m (Maybe Vn)
+type OptLabelVn = forall m f a. (Monad m, Foldable f, Vnable a)
+                => Bool -> String -> Visited -> m (f a) -> m (Maybe Vn)
 
 -- | Returns an optional Vn that represents a label with a
 -- sub-sequence of adjs (Vns).

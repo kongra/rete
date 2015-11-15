@@ -15,6 +15,7 @@ module AI.Rete.Net
     , addProdP
 
       -- * Creating conditions
+    , C()
     , c
 
       -- * Variable value access

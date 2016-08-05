@@ -1,4 +1,4 @@
-{-# LANGUAGE Trustworthy          #-}
+{-# LANGUAGE Safe                 #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances    #-}
 {-# LANGUAGE RankNTypes           #-}

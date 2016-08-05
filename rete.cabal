@@ -14,7 +14,12 @@ extra-source-files:  README.md
 cabal-version:       >=1.10
 
 library
-  ghc-options:       -O2 -W -Wall -funbox-strict-fields
+  ghc-options:       -O2 -W -Wall
+                     -Wincomplete-uni-patterns
+                     -Wincomplete-record-updates
+                     -Wmissing-exported-signatures
+                     -Widentities
+                     -funbox-strict-fields
   if impl(ghc >= 6.8)
     ghc-options:     -fwarn-tabs
 
@@ -26,7 +31,7 @@ library
                      AI.Rete
 
   other-extensions:  Safe
-  build-depends:     base                 >= 4.7
+  build-depends:     base                 >= 4.8
                    , containers           >= 0.5.5.1
                    , transformers
                    , unordered-containers >= 0.2.5.0

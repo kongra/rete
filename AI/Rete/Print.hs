@@ -52,7 +52,6 @@ import           AI.Rete.Data
 import           AI.Rete.Flow
 import           AI.Rete.Net (traceAction, valE, exec, breadthFirst)
 import           AI.Rete.State
-import           Control.Monad (liftM)
 import qualified Control.Monad.Trans.State.Strict as S
 import qualified Data.HashMap.Strict as Map
 import qualified Data.HashSet as Set
@@ -252,11 +251,11 @@ labeledLeavesVn vs label shows' = labelVn vs label (map (leafVn vs) shows')
 -- | Converts the monadic foldable into a sequence of Vns. All in the
 -- m monad.
 toVnsM :: (Monad m, Foldable f, Vnable a) => Visited -> m (f a) -> m [Vn]
-toVnsM vs = liftM (map (toVn vs)) . toListM
+toVnsM vs = fmap (map (toVn vs)) . toListM
 
 -- | Works like toVnsM, but returns a list of VnShows instead of Vns.
 toVnShowsM :: (Monad m, Foldable f, Vnable a) => m (f a) -> m [VnShow]
-toVnShowsM = liftM (map toVnShow) . toListM
+toVnShowsM = fmap (map toVnShow) . toListM
 
 type OptLabelVn = forall m f a. (Monad m, Foldable f, Vnable a)
                 => Bool -> String -> Visited -> m (f a) -> m (Maybe Vn)
@@ -363,7 +362,7 @@ showAmem amem flags vs = do
                    else shows amem
   withEllipsisM (visited amem vs) $
     if is AmemWmesCount flags
-      then (do wmes <- liftM (view amemWmes) (viewS amem)
+      then (do wmes <- fmap (view amemWmes) (viewS amem)
                return $ compose [ repr
                                 , showString ", "
                                 , shows (length wmes)
@@ -390,7 +389,7 @@ instance Vnable Bmem where
 showBmem :: Bmem -> Flags -> Visited -> ReteM ShowS
 showBmem bmem flags vs = withEllipsisM (visited bmem vs) $
   if is BmemToksCount flags
-    then (do toks <- liftM (view bmemToks) (viewS bmem)
+    then (do toks <- fmap (view bmemToks) (viewS bmem)
              return $ compose [ shows bmem
                               , showString ", "
                               , shows (length toks)
@@ -506,7 +505,7 @@ toShowS d switch obj = printTree (switches conf) (toVn cleanVisited obj)
 
 -- | Works like toShowS, but returns String instead of ShowS
 toString :: Vnable a => Depth -> Switch -> a -> ReteM String
-toString d switch = liftM evalShowS . toShowS d switch
+toString d switch = fmap evalShowS . toShowS d switch
   where evalShowS s = s ""
 
 -- | Returns a string representing the state as a tree.

@@ -24,7 +24,6 @@ module AI.Rete.State
     where
 
 import           AI.Rete.Data
-import           Control.Monad (liftM)
 import qualified Control.Monad.Trans.State.Strict as S
 import qualified Data.HashMap.Strict as Map
 import           Data.Hashable (Hashable)
@@ -59,19 +58,19 @@ instance State Rete ReteState where
   {-# INLINE setS  #-}
 
 instance State Amem AmemState where
-  viewS amem   = liftM (lookupState amem . view reteAmemStates) (viewS Rete)
+  viewS amem   = fmap (lookupState amem . view reteAmemStates) (viewS Rete)
   setS  amem s = viewS Rete >>= setS Rete . over reteAmemStates (Map.insert amem s)
   {-# INLINE viewS #-}
   {-# INLINE setS  #-}
 
 instance State Bmem BmemState where
-  viewS bmem   = liftM (lookupState bmem . view reteBmemStates) (viewS Rete)
+  viewS bmem   = fmap (lookupState bmem . view reteBmemStates) (viewS Rete)
   setS  bmem s = viewS Rete >>= setS Rete . over reteBmemStates (Map.insert bmem s)
   {-# INLINE viewS #-}
   {-# INLINE setS  #-}
 
 instance State Join JoinState where
-  viewS bmem   = liftM (lookupState bmem . view reteJoinStates) (viewS Rete)
+  viewS bmem   = fmap (lookupState bmem . view reteJoinStates) (viewS Rete)
   setS  bmem s = viewS Rete >>= setS Rete . over reteJoinStates (Map.insert bmem s)
   {-# INLINE viewS #-}
   {-# INLINE setS  #-}

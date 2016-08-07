@@ -44,7 +44,7 @@ module AI.Rete.Net
 import           AI.Rete.Data
 import           AI.Rete.Flow
 import           AI.Rete.State
-import           Control.Monad (liftM, liftM3, forM, forM_, when)
+import           Control.Monad (liftM3, forM, forM_, when)
 import qualified Data.HashMap.Strict as Map
 import qualified Data.HashSet as Set
 import           Data.Maybe (isJust, fromJust)
@@ -68,7 +68,7 @@ buildOrShareAmem (Obj o) (Attr a) (Val v) = do
       v'  = Val  (f v)
       k   = Wme o' a' v'
 
-  amems <- liftM (view reteAmems) (viewS Rete)
+  amems <- fmap (view reteAmems) (viewS Rete)
 
   case Map.lookup k amems of
     Just amem -> return amem  -- Happily found.
@@ -161,7 +161,7 @@ buildOrShareBmem parent = do
     Just bmem -> return bmem  -- Happily found.
     Nothing   -> do
       -- Let's create a new Bmem and bind it to its state.
-      bmem <- liftM Bmem genid
+      bmem <- fmap Bmem genid
       overS (over reteBmemStates (Map.insert bmem (BmemState [] []))) Rete
 
       -- Update with matches from above:
@@ -262,7 +262,7 @@ data C = C !(ReteM (Obj  ConstantOrVariable))
            !(ReteM (Val  ConstantOrVariable))
 
 toField :: ToConstantOrVariable a => (ConstantOrVariable -> b) -> a -> ReteM b
-toField f = liftM f . toConstantOrVariable
+toField f = fmap f . toConstantOrVariable
 {-# INLINE toField #-}
 
 -- | Creates a positive condition.
@@ -415,7 +415,7 @@ forwardStep strategy (agenda, state) = run state newAgenda
   where
     newAgenda = case agenda of
       []     -> return []
-      (t:ts) -> liftM (strategy ts) (taskValue t)
+      (t:ts) -> fmap (strategy ts) (taskValue t)
 
 -- | Creates a forward chain of changes from the initial Agenda and
 -- state to the empty agenda and target state.

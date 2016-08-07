@@ -34,7 +34,7 @@ module AI.Rete.Flow
 
 import           AI.Rete.Data
 import           AI.Rete.State
-import           Control.Monad (when, liftM, liftM3, forM)
+import           Control.Monad (when, liftM3, forM)
 import           Data.Foldable (toList)
 import qualified Data.HashMap.Strict as Map
 import qualified Data.HashSet as Set
@@ -61,7 +61,7 @@ genid = do
 
 internConstant :: T.Text -> ReteM Constant
 internConstant s = do
-  cs <- liftM (view reteConstants) (viewS Rete)
+  cs <- fmap (view reteConstants) (viewS Rete)
   case Map.lookup s cs of
     Just c  -> return c
     Nothing -> do
@@ -72,7 +72,7 @@ internConstant s = do
 
 internVariable :: T.Text -> ReteM Variable
 internVariable s = do
-  vs <- liftM (view reteVariables) (viewS Rete)
+  vs <- fmap (view reteVariables) (viewS Rete)
   case Map.lookup s vs of
     Just v  -> return v
     Nothing -> do
@@ -89,7 +89,7 @@ internFields o a v =
 {-# INLINE internFields #-}
 
 internField :: ToConstant a => (Constant -> b) -> a -> ReteM b
-internField f s = liftM f (toConstant s)
+internField f s = fmap f (toConstant s)
 {-# INLINE internField #-}
 
 -- WMES INDEXES MANIPULATION
@@ -134,7 +134,7 @@ feedAmem amems wme k = case Map.lookup k amems of
 feedAmems :: Wme -> Obj Constant -> Attr Constant -> Val Constant -> ReteM Agenda
 feedAmems wme o a v = do
   let w = wildcardConstant
-  amems <- liftM (view reteAmems) (viewS Rete)
+  amems <- fmap (view reteAmems) (viewS Rete)
 
   a1 <- feedAmem amems wme $! Wme      o        a       v
   a2 <- feedAmem amems wme $! Wme      o        a  (Val w)
@@ -208,7 +208,7 @@ amemWmesForIndex = Map.lookupDefault Set.empty
 rightActivateJoin :: Wme -> Join -> ReteM Agenda
 rightActivateJoin wme join = do
   state   <- viewS join
-  toks    <- liftM (view bmemToks) (viewS (joinParent join))
+  toks    <- fmap (view bmemToks) (viewS (joinParent join))
   agendas <- forM toks $ \tok ->
     if performJoinTests (joinTests join) tok wme
       then leftActivateJoinChildren state tok wme
@@ -408,11 +408,11 @@ class ToConstantOrVariable a where
   toConstantOrVariable :: a -> ReteM ConstantOrVariable
 
 instance ToConstantOrVariable ConstantOrVariable where
-  toConstantOrVariable = return . id
+  toConstantOrVariable = return
   {-# INLINE toConstantOrVariable #-}
 
 instance ToConstantOrVariable Var where
-  toConstantOrVariable = liftM JustVariable
+  toConstantOrVariable = fmap JustVariable
   {-# INLINE toConstantOrVariable #-}
 
 instance ToConstantOrVariable Primitive where
@@ -484,7 +484,7 @@ instance ToConstantOrVariable T.Text where
   -- Raw String is always a constant.
   toConstantOrVariable s
     | T.null s  = return (JustConstant emptyConstant)
-    | otherwise = liftM JustConstant (internConstant s)
+    | otherwise = fmap JustConstant (internConstant s)
   {-# INLINE toConstantOrVariable #-}
 
 instance ToConstantOrVariable String where

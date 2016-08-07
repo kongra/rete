@@ -17,7 +17,7 @@ library
   ghc-options:       -O2 -W -Wall
                      -Wincomplete-uni-patterns
                      -Wincomplete-record-updates
-                     -Wmissing-exported-signatures
+                     -Wmissing-signatures
                      -Widentities
                      -funbox-strict-fields
   if impl(ghc >= 6.8)
